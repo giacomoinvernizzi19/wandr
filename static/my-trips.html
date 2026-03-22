@@ -43,7 +43,14 @@
         <a :href="'/trip?id=' + t.id" class="trip-card">
           <div class="trip-card-map" :style="mapPreviewStyle(t)"></div>
           <div class="trip-card-body">
-            <div class="trip-card-destination" x-text="t.destination"></div>
+            <div class="trip-card-destination" x-show="editingId !== t.id" x-text="t.destination"></div>
+            <input x-show="editingId === t.id" x-ref="renameInput"
+                   class="input" style="font-family:var(--font-display);font-size:var(--text-xl);font-weight:700;padding:var(--space-1) var(--space-2)"
+                   :value="t.destination"
+                   @click.prevent.stop
+                   @keydown.enter.prevent="finishRename(t, $event.target.value)"
+                   @keydown.escape.prevent="editingId = null"
+                   @blur="finishRename(t, $event.target.value)">
             <div class="trip-card-dates">
               <template x-if="t.start_date">
                 <span x-text="fmtDateShort(t.start_date) + (t.end_date ? ' — ' + fmtDateShort(t.end_date) : '')"></span>
@@ -54,7 +61,15 @@
             </div>
             <div class="trip-card-footer">
               <span class="trip-card-days" x-text="t.num_days + ' day' + (t.num_days > 1 ? 's' : '')"></span>
-              <span class="badge" :class="t.status === 'complete' ? 'badge-teal' : 'badge-sand'" x-text="t.status"></span>
+              <div style="display:flex;align-items:center;gap:var(--space-2)">
+                <span class="badge" :class="t.status === 'complete' ? 'badge-teal' : 'badge-sand'" x-text="t.status"></span>
+                <button class="btn btn-ghost btn-sm" @click.prevent.stop="startRename(t, $event)" title="Rename" style="padding:var(--space-1)">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+                <button class="btn btn-ghost btn-sm" @click.prevent.stop="deleteTrip(t)" title="Delete" style="padding:var(--space-1);color:var(--coral-500)">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                </button>
+              </div>
             </div>
           </div>
         </a>
@@ -69,6 +84,7 @@
     return {
       trips: [],
       loading: true,
+      editingId: null,
 
       async init() {
         const auth = Alpine.store('auth');
@@ -104,6 +120,42 @@
 
       lon2tile(lon, zoom) { return Math.floor((lon + 180) / 360 * Math.pow(2, zoom)); },
       lat2tile(lat, zoom) { return Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom)); },
+
+      startRename(t, event) {
+        this.editingId = t.id;
+        this.$nextTick(() => {
+          const input = event.target.closest('.trip-card').querySelector('input');
+          if (input) { input.focus(); input.select(); }
+        });
+      },
+
+      async finishRename(t, newName) {
+        if (this.editingId !== t.id) return;
+        this.editingId = null;
+        const trimmed = (newName || '').trim();
+        if (!trimmed || trimmed === t.destination) return;
+        try {
+          const res = await api(`/api/trips/${t.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ destination: trimmed }),
+          });
+          if (res.ok) {
+            t.destination = trimmed;
+            showToast('Trip renamed', 'success');
+          }
+        } catch {}
+      },
+
+      async deleteTrip(t) {
+        if (!confirm(`Delete "${t.destination}"? This cannot be undone.`)) return;
+        try {
+          const res = await api(`/api/trips/${t.id}`, { method: 'DELETE' });
+          if (res.ok) {
+            this.trips = this.trips.filter(x => x.id !== t.id);
+            showToast('Trip deleted', 'success');
+          }
+        } catch {}
+      },
     };
   }
   </script>

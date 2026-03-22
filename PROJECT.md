@@ -93,6 +93,8 @@ node run.js C:/tmp/playwright-test-wandr.js
 - Alpine.js `x-if` removes DOM, breaks Leaflet — usare `x-show` + `x-cloak` per container mappa
 - `JSON.parse()` in getter ritorna nuovi oggetti ogni volta — mutazioni in-memory sono effimere, riscrivere in `activities_json`
 - Wrangler v4 asset handler ritorna 405 su POST in locale (SPA mode) — funziona in produzione
+- Transport heuristic: haversine * 1.3 = distanza urbana approssimata. Auto-select mode per distanza (<=1.5km walk, 1.5-5km bike/transit, >5km car)
+- `removeActivity()` deve ricalcolare `travel_to_next` del precedente e cancellare quello dell'ultimo
 
 ---
 
@@ -103,6 +105,9 @@ node run.js C:/tmp/playwright-test-wandr.js
 | 2026-03-21 | src/index.ts, static/*.html, static/style.css | - | Initial build: questionnaire, trip view, map, auth |
 | 2026-03-22 | static/trip.html, static/style.css | Playwright PASS | Bug fix: pin/refresh persistence, first-load rendering. New: Timeline Gantt view |
 | 2026-03-22 | src/index.ts, static/plan.html, static/trip.html, static/style.css, src/index.test.ts | vitest 18/18 + Playwright 31/31 | Timeline: transport segments, color legend, dynamic axis (midnight). Questionnaire: multi-select transport (pills), bike option, removed mix |
+| 2026-03-22 | static/trip.html, static/style.css, static/sw.js | Playwright 49/49 | Timeline rewrite: dynamic time engine, readable bars (emoji+time+name), transport strip below bars (80px rows), legend removed, pinned=amber 3px border, mobile vertical timeline, detail emoji, SW v4 |
+| 2026-03-22 | static/trip.html, static/style.css, static/sw.js | Playwright 33/33 | Timeline v2: replaced horizontal Gantt with vertical schedule strip. Full-width rows (time+accent+emoji+name+duration), transport connectors, proportional duration fill. Removed all orphaned gantt JS/CSS. SW v6 |
+| 2026-03-22 | src/index.ts, static/trip.html, static/my-trips.html, static/style.css, static/sw.js | Playwright PASS | Trip management: PATCH rename endpoint, inline rename + delete in My Trips. Remove activity with transport recalc. Local transport heuristic (haversineKm + estimateTransport). Transport mode override (clickable strips + picker). SW v7 |
 
 ---
 

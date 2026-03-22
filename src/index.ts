@@ -504,6 +504,18 @@ route('DELETE', '/api/trips/:id', async (req, env, user, params) => {
   return json({ ok: true });
 });
 
+// PATCH /api/trips/:id - Rename trip
+route('PATCH', '/api/trips/:id', async (req, env, user, params) => {
+  if (!user) return err('Unauthorized', 401);
+  const body = await req.json() as { destination?: string };
+  if (!body.destination?.trim()) return err('destination required');
+  const result = await env.DB.prepare(
+    "UPDATE trips SET destination = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?"
+  ).bind(body.destination.trim(), params.id, user.id).run();
+  if (!result.meta.changes) return err('Not found', 404);
+  return json({ ok: true });
+});
+
 // PUT /api/trips/:id/claim - Claim anonymous trip after login
 route('PUT', '/api/trips/:id/claim', async (req, env, user, params) => {
   if (!user) return err('Unauthorized', 401);
@@ -568,7 +580,17 @@ route('POST', '/api/trips/:id/days/:dayNum/refresh', async (req, env, user, para
   const prefs = JSON.parse(trip.preferences_json);
 
   const prompt = buildPrompt(prefs, parseInt(params.dayNum), trip.num_days, body.pinned_activities || []);
-  const activities = await callGemini(prompt, env.GEMINI_API_KEY);
+
+  let activities: Activity[];
+  try {
+    activities = await callGemini(prompt, env.GEMINI_API_KEY);
+  } catch (e: any) {
+    const msg = e.message || '';
+    if (msg.includes('429')) {
+      return err('AI rate limit reached — please wait a few minutes and try again', 429);
+    }
+    return err('AI generation failed — please try again later', 502);
+  }
 
   // Merge: keep pinned, replace unpinned
   const pinned = (body.pinned_activities || []).map(a => ({ ...a, pinned: true }));

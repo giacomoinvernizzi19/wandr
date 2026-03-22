@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Your Trip — Wandr</title>
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
@@ -20,6 +20,11 @@
       border-bottom: 1px solid var(--border-light);
     }
     .refresh-bar span { font-size: var(--text-xs); color: var(--text-tertiary); }
+    .refresh-error {
+      padding: var(--space-2) var(--space-5); font-size: var(--text-xs);
+      color: var(--coral-800); background: var(--coral-100); cursor: pointer;
+      border-bottom: 1px solid var(--coral-200);
+    }
     .save-sign-in {
       padding: var(--space-4) var(--space-5); background: var(--primary-light);
       border-bottom: 1px solid var(--teal-200); text-align: center;
@@ -81,7 +86,14 @@
     </div>
 
     <!-- Trip content -->
-    <div x-show="!generating && trip" x-cloak>
+    <div x-show="!generating && trip" x-cloak style="position:relative">
+      <!-- Loading overlay — covers split-view while map + activities init -->
+      <div x-show="loading" x-cloak style="position:absolute;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;background:var(--bg)">
+        <div style="text-align:center">
+          <div class="compass-loader"></div>
+          <div class="generating-text" style="margin-top:var(--space-6)">Loading your trip...</div>
+        </div>
+      </div>
       <div class="split-view">
         <!-- List panel -->
         <div class="split-panel split-list" :class="{ hidden: mobileView === 'map' }" id="list-panel">
@@ -129,6 +141,7 @@
               <template x-if="!refreshing"><span>Refresh unpinned</span></template>
             </button>
           </div>
+          <div x-show="refreshError" x-cloak class="refresh-error" x-text="refreshError" @click="refreshError = ''"></div>
 
           <!-- Activities -->
           <div id="activities-list">
@@ -150,7 +163,7 @@
                     <span x-text="a.tip"></span>
                   </div>
                   <div class="activity-meta" style="margin-top:var(--space-3)">
-                    <span class="activity-tag" x-text="a.type"></span>
+                    <span class="activity-tag" x-text="_typeConfig(a.type).emoji + ' ' + a.type"></span>
                     <span class="cost-badge" :class="costClass(a.cost_level)" x-text="a.cost_level === 'free' ? 'Free' : a.cost_estimate"></span>
                     <span class="activity-tag" x-show="a.address" x-text="a.address"></span>
                   </div>
@@ -177,14 +190,41 @@
 
                   <div style="margin-top:var(--space-2);font-size:var(--text-xs);color:var(--text-tertiary);font-style:italic" x-text="a.why" x-show="a.why"></div>
 
-                  <!-- Pin button -->
-                  <button class="pin-btn" :class="{ pinned: a.pinned }" @click.stop="togglePin(a)">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" :fill="a.pinned ? 'currentColor' : 'none'"/>
-                    </svg>
-                    <span x-text="a.pinned ? 'Pinned — kept on refresh' : 'Pin — keep on refresh'"></span>
-                  </button>
+                  <!-- Pin + Remove buttons -->
+                  <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-top:var(--space-3)">
+                    <button class="pin-btn" :class="{ pinned: a.pinned }" @click.stop="togglePin(a)">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" :fill="a.pinned ? 'currentColor' : 'none'"/>
+                      </svg>
+                      <span x-text="a.pinned ? 'Pinned — kept on refresh' : 'Pin — keep on refresh'"></span>
+                    </button>
+                    <button class="remove-btn" @click.stop="if(confirm('Remove ' + a.name + '?')) removeActivity(a)">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                      Remove
+                    </button>
+                  </div>
                 </div>
+
+                <!-- Transport strip between activities -->
+                <template x-if="a.travel_to_next && currentActivities.indexOf(a) < currentActivities.length - 1">
+                  <div class="transport-strip" @click.stop="editingTransport = (editingTransport === a.id ? null : a.id)">
+                    <span class="transport-strip-icon" x-text="_transportIcon(a.travel_to_next.mode)"></span>
+                    <span class="transport-strip-text" x-text="a.travel_to_next.duration_min + ' min'"></span>
+                    <span class="transport-strip-dist" x-text="a.travel_to_next.distance_km ? a.travel_to_next.distance_km + ' km' : ''"></span>
+                    <svg class="transport-strip-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                  </div>
+                </template>
+                <template x-if="editingTransport === a.id && a.travel_to_next">
+                  <div class="transport-picker" @click.stop>
+                    <template x-for="m in _getTransportPrefs()" :key="m">
+                      <button class="pill" :class="{ selected: a.travel_to_next.mode === m }"
+                              @click="changeTransportMode(a, m)">
+                        <span x-text="_transportIcon(m)"></span>
+                        <span x-text="m.replace('_',' ')"></span>
+                      </button>
+                    </template>
+                  </div>
+                </template>
               </div>
             </template>
           </div>
@@ -200,8 +240,14 @@
 
         <!-- Mobile view toggle -->
         <div class="view-toggle">
-          <button class="btn btn-ghost btn-sm" :class="{ active: mobileView === 'list' }" @click="setMobileView('list')">List</button>
-          <button class="btn btn-ghost btn-sm" :class="{ active: mobileView === 'map' }" @click="setMobileView('map')">Map</button>
+          <button class="view-toggle-btn" :class="{ active: mobileView === 'list' }" @click="setMobileView('list')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            List
+          </button>
+          <button class="view-toggle-btn" :class="{ active: mobileView === 'map' }" @click="setMobileView('map')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+            Map
+          </button>
         </div>
       </div>
 
@@ -227,40 +273,45 @@
             </template>
           </div>
 
-          <!-- Legend -->
-          <div class="tl-legend" x-show="tlTypesPresent.length > 0">
-            <template x-for="t in tlTypesPresent" :key="'legend-' + t">
-              <div class="tl-legend-item">
-                <div class="tl-legend-dot" :class="'tl-type-' + t"></div>
-                <span x-text="t"></span>
-              </div>
-            </template>
-          </div>
-
-          <!-- Timeline body -->
+          <!-- Timeline body: vertical schedule -->
           <div class="tl-body">
-            <!-- Time axis -->
-            <div class="tl-axis">
-              <template x-for="h in tlAxisHours" :key="'h'+h">
-                <div class="tl-axis-hour" :style="'left:' + ((h - 8) / (tlAxisHours.length > 0 ? tlAxisHours[tlAxisHours.length-1] - 8 : 14) * 100) + '%'">
-                  <span x-text="h === 24 ? '00:00' : h + ':00'"></span>
-                </div>
-              </template>
-            </div>
-
-            <!-- Bars -->
-            <div class="tl-bars" :style="'min-height:' + ((_tlRowCount || 1) * 50 + 6) + 'px'">
-              <template x-for="a in tlActivities" :key="'tl-a-' + a.id">
-                <div class="tl-bar" :class="'tl-type-' + a.type + (a.pinned ? ' tl-pinned' : '') + (tlSelected?.id === a.id ? ' tl-active' : '')"
-                     :style="tlBarStyle(a)" @click="tlSelected = a">
-                  <span class="tl-bar-pin" x-show="a.pinned">&#9733;</span>
-                  <span class="tl-bar-name" x-text="a.name"></span>
-                </div>
-              </template>
-              <!-- Transport segments -->
-              <template x-for="(seg, idx) in tlTransportSegments" :key="'tl-t-' + idx">
-                <div class="tl-transport-bar" :style="seg.style">
-                  <span x-text="seg.icon + ' ' + seg.duration + '\u2032'"></span>
+            <div class="tl-schedule">
+              <template x-for="(a, idx) in tlActivities" :key="'tl-a-' + a.id">
+                <div>
+                  <!-- Activity row -->
+                  <div class="tl-row" :class="{ 'tl-row-pinned': a.pinned, 'tl-row-active': tlSelected?.id === a.id }"
+                       @click="tlSelected = a"
+                       :style="'--type-bg:' + _typeConfig(a.type).bg + ';--type-border:' + _typeConfig(a.type).border + ';--type-color:' + _typeConfig(a.type).color + ';--dur-pct:' + _tlDurPct(a) + '%'">
+                    <div class="tl-row-time">
+                      <span class="tl-row-start" x-text="a.time_start"></span>
+                      <span class="tl-row-end" x-text="a.time_end"></span>
+                    </div>
+                    <div class="tl-row-accent"></div>
+                    <div class="tl-row-content">
+                      <span class="tl-row-emoji" x-text="_typeConfig(a.type).emoji"></span>
+                      <span class="tl-row-name" x-text="a.name"></span>
+                    </div>
+                    <div class="tl-row-dur" x-text="_tlFmtDur(a.duration_min)"></div>
+                  </div>
+                  <!-- Transport connector (clickable) -->
+                  <template x-if="a.travel_to_next && idx < tlActivities.length - 1">
+                    <div class="tl-transit" style="cursor:pointer" @click.stop="editingTransport = (editingTransport === a.id ? null : a.id)">
+                      <div class="tl-transit-line"></div>
+                      <span class="tl-transit-label" x-text="_transportIcon(a.travel_to_next.mode) + ' ' + a.travel_to_next.duration_min + ' min'"></span>
+                      <div class="tl-transit-line"></div>
+                    </div>
+                  </template>
+                  <template x-if="editingTransport === a.id && a.travel_to_next">
+                    <div class="transport-picker" style="padding-left:68px" @click.stop>
+                      <template x-for="m in _getTransportPrefs()" :key="'tl-'+m">
+                        <button class="pill" :class="{ selected: a.travel_to_next.mode === m }"
+                                @click="changeTransportMode(a, m)">
+                          <span x-text="_transportIcon(m)"></span>
+                          <span x-text="m.replace('_',' ')"></span>
+                        </button>
+                      </template>
+                    </div>
+                  </template>
                 </div>
               </template>
             </div>
@@ -274,7 +325,7 @@
                 <div class="tl-detail-time" x-text="(tlSelected?.time_start || '') + ' — ' + (tlSelected?.time_end || '') + ' (' + (tlSelected?.duration_min || '') + ' min)'"></div>
               </div>
               <div style="display:flex;gap:var(--space-2);align-items:center">
-                <span class="activity-tag" x-text="tlSelected?.type"></span>
+                <span class="activity-tag" x-text="_typeConfig(tlSelected?.type).emoji + ' ' + tlSelected?.type"></span>
                 <span class="cost-badge" :class="costClass(tlSelected?.cost_level)" x-text="tlSelected?.cost_level === 'free' ? 'Free' : tlSelected?.cost_estimate"></span>
                 <div class="score-pill" x-show="tlSelected?.hidden_gem_score" :style="'--score-pct:' + ((tlSelected?.hidden_gem_score || 0) * 10) + '%'">
                   <span class="score-label">Gem</span>
@@ -293,6 +344,10 @@
                   <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" :fill="tlSelected?.pinned ? 'currentColor' : 'none'"/>
                 </svg>
                 <span x-text="tlSelected?.pinned ? 'Pinned' : 'Pin'"></span>
+              </button>
+              <button class="remove-btn" @click="if(confirm('Remove ' + (tlSelected?.name || '') + '?')) { removeActivity(tlSelected); tlSelected = null; }">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                Remove
               </button>
               <a x-show="tlSelected?.website" :href="tlSelected?.website" target="_blank" rel="noopener" class="activity-link">Website</a>
               <a x-show="tlSelected?.name" :href="'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent((tlSelected?.name || '') + ' ' + (tlSelected?.address || ''))" target="_blank" rel="noopener" class="activity-link">Google Maps</a>
@@ -313,6 +368,40 @@
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <script src="/app.js"></script>
   <script>
+  function haversineKm(lat1, lng1, lat2, lng2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function estimateTransport(from, to, prefs, forcedMode) {
+    const dist = haversineKm(from.lat, from.lng, to.lat, to.lng) * 1.3;
+    const speeds = { walking: 5, bike: 15, bus: 15, public_transport: 20, car: 30, taxi: 30, train: 40 };
+
+    let mode;
+    if (forcedMode) {
+      mode = forcedMode;
+    } else {
+      const available = (prefs || ['walking']);
+      if (dist <= 1.5 && available.includes('walking')) {
+        mode = 'walking';
+      } else if (dist <= 5) {
+        mode = available.find(m => m !== 'walking') || available[0];
+      } else {
+        mode = available.find(m => ['car', 'taxi', 'train', 'public_transport'].includes(m)) || available[available.length - 1];
+      }
+    }
+
+    const speed = speeds[mode] || 20;
+    const rawMin = (dist / speed) * 60;
+    const duration = Math.max(5, Math.round(rawMin / 5) * 5);
+    return { mode, duration_min: duration, distance_km: Math.round(dist * 10) / 10 };
+  }
+
   function tripView() {
     return {
       trip: null,
@@ -322,8 +411,10 @@
       generatingMsg: 'Creating your perfect itinerary...',
       generatingProgress: 0,
       refreshing: false,
+      refreshError: '',
       highlightedId: null,
       mobileView: 'list',
+      loading: true,
       map: null,
       markers: [],
       polyline: null,
@@ -331,6 +422,7 @@
       timelineOpen: false,
       tlDay: 1,
       tlSelected: null,
+      editingTransport: null,
 
       get currentActivities() {
         const day = this.days.find(d => d.day_number === this.currentDay);
@@ -353,73 +445,22 @@
         try { return JSON.parse(day.activities_json); } catch { return []; }
       },
 
-      // Unique activity types in current timeline day
-      get tlTypesPresent() {
-        return [...new Set(this.tlActivities.map(a => a.type))].filter(Boolean);
+      // Duration as percentage of longest activity (for background fill)
+      _tlDurPct(a) {
+        const acts = this.tlActivities;
+        if (!acts.length) return 0;
+        const maxDur = Math.max(...acts.map(x => x.duration_min || 60));
+        return Math.min(100, Math.round(((a.duration_min || 60) / maxDur) * 100));
       },
 
-      // Dynamic axis hours based on activity times
-      get tlAxisHours() {
-        let maxHour = 22;
-        const toMin = (t) => {
-          const [h, m] = (t || '9:00').split(':').map(Number);
-          let mins = h * 60 + (m || 0);
-          if (h < 6) mins += 1440; // 00:xx-05:xx treated as next day
-          return mins;
-        };
-        for (const a of this.tlActivities) {
-          const endMin = toMin(a.time_end);
-          const endHour = Math.ceil(endMin / 60);
-          if (endHour > maxHour) maxHour = Math.min(endHour, 24);
-        }
-        const hours = [];
-        for (let h = 8; h <= maxHour; h++) hours.push(h);
-        return hours;
-      },
-
-      // The last axis hour determines the time range
-      get _tlRangeEnd() {
-        const hours = this.tlAxisHours;
-        return (hours.length > 0 ? hours[hours.length - 1] : 22) * 60;
-      },
-
-      _tlToMin(t) {
-        const [h, m] = (t || '9:00').split(':').map(Number);
-        let mins = h * 60 + (m || 0);
-        if (h < 6) mins += 1440; // 00:xx-05:xx treated as next day
-        return mins;
-      },
-
-      tlBarStyle(a) {
-        const start = this._tlToMin(a.time_start);
-        const end = this._tlToMin(a.time_end);
-        const rangeStart = 480; // 8:00
-        const rangeEnd = this._tlRangeEnd;
-        const total = rangeEnd - rangeStart;
-        const left = Math.max(0, ((start - rangeStart) / total) * 100);
-        const width = Math.max(2, ((end - start) / total) * 100);
-        const row = this._tlRow(a);
-        const top = row * 50;
-        return `left:${left}%;width:${width}%;top:${top}px`;
-      },
-
-      _tlRow(a) {
-        if (!this._tlRowCache || this._tlRowCacheDay !== this.tlDay) {
-          this._tlRowCacheDay = this.tlDay;
-          this._tlRowCache = {};
-          const rows = [];
-          for (const act of this.tlActivities) {
-            const s = this._tlToMin(act.time_start);
-            const e = this._tlToMin(act.time_end);
-            let placed = false;
-            for (let r = 0; r < rows.length; r++) {
-              if (s >= rows[r]) { rows[r] = e; this._tlRowCache[act.id] = r; placed = true; break; }
-            }
-            if (!placed) { this._tlRowCache[act.id] = rows.length; rows.push(e); }
-          }
-          this._tlRowCount = rows.length;
-        }
-        return this._tlRowCache[a.id] || 0;
+      // Format duration: 150 -> "2h30", 45 -> "45m"
+      _tlFmtDur(min) {
+        if (!min) return '';
+        const h = Math.floor(min / 60);
+        const m = min % 60;
+        if (h === 0) return m + 'm';
+        if (m === 0) return h + 'h';
+        return h + 'h' + (m < 10 ? '0' : '') + m;
       },
 
       // Transport icon lookup
@@ -428,33 +469,19 @@
         return icons[(mode || '').toLowerCase()] || '\uD83D\uDEB6';
       },
 
-      // Computed transport segments between consecutive activities
-      get tlTransportSegments() {
-        const acts = this.tlActivities;
-        const segs = [];
-        const rangeStart = 480;
-        const rangeEnd = this._tlRangeEnd;
-        const total = rangeEnd - rangeStart;
-
-        for (let i = 0; i < acts.length - 1; i++) {
-          const a = acts[i];
-          if (!a.travel_to_next) continue;
-          const gapStart = this._tlToMin(a.time_end);
-          const gapEnd = this._tlToMin(acts[i + 1].time_start);
-          if (gapEnd <= gapStart) continue;
-
-          const left = Math.max(0, ((gapStart - rangeStart) / total) * 100);
-          const width = Math.max(1, ((gapEnd - gapStart) / total) * 100);
-          const row = this._tlRow(a);
-          const top = row * 50 + 8; // offset within the row
-
-          segs.push({
-            style: `left:${left}%;width:${width}%;top:${top}px`,
-            icon: this._transportIcon(a.travel_to_next.mode),
-            duration: a.travel_to_next.duration_min,
-          });
-        }
-        return segs;
+      _typeConfig(type) {
+        const configs = {
+          restaurant: { emoji: '\uD83C\uDF74', bg: 'var(--coral-100)', border: 'var(--coral-300)', color: 'var(--coral-800)' },
+          cafe:       { emoji: '\u2615',       bg: 'var(--amber-100)', border: 'var(--amber-300)', color: 'var(--amber-700)' },
+          museum:     { emoji: '\uD83C\uDFDB\uFE0F', bg: 'var(--teal-100)', border: 'var(--teal-300)', color: 'var(--teal-800)' },
+          bar:        { emoji: '\uD83C\uDF78', bg: '#f3e8ff',         border: '#c084fc',          color: '#6b21a8' },
+          market:     { emoji: '\uD83D\uDECD\uFE0F', bg: '#fff7ed',   border: '#fdba74',          color: '#9a3412' },
+          park:       { emoji: '\uD83C\uDF33', bg: '#ecfdf5',         border: '#6ee7b7',          color: '#065f46' },
+          viewpoint:  { emoji: '\uD83D\uDC41\uFE0F', bg: '#eff6ff',   border: '#93c5fd',          color: '#1e40af' },
+          experience: { emoji: '\u2728',       bg: '#fdf2f8',         border: '#f9a8d4',          color: '#9d174d' },
+          attraction: { emoji: '\u2B50',       bg: '#eef2ff',         border: '#a5b4fc',          color: '#3730a3' },
+        };
+        return configs[type] || { emoji: '\uD83D\uDCCD', bg: 'var(--sand-100)', border: 'var(--sand-300)', color: 'var(--sand-700)' };
       },
 
       async init() {
@@ -462,7 +489,6 @@
         const tripId = params.get('id');
         if (!tripId) { window.location.href = '/'; return; }
 
-        // Load trip
         const data = await apiJson(`/api/trips/${tripId}`);
         if (!data || data.error) {
           showToast('Trip not found', 'error');
@@ -471,40 +497,31 @@
         }
 
         const needsGeneration = (data.days || []).length === 0 && data.status !== 'complete';
-
-        // Set generating BEFORE trip to avoid DOM flash
         if (needsGeneration) this.generating = true;
 
         this.trip = data;
         this.days = data.days || [];
 
+        // Register $watch BEFORE generateTrip so the transition is captured
+        this.$watch('generating', (val) => {
+          if (!val && this.trip) {
+            this.loading = true;
+            this.$nextTick(() => this._initMapAndReveal());
+          }
+        });
+
         if (needsGeneration) {
           await this.generateTrip(tripId);
+          // $watch fires when generating→false (now registered correctly)
+        } else {
+          // Already generated — show loading overlay while map inits
+          this.$nextTick(() => this._initMapAndReveal());
         }
 
         // Claim trip for logged-in user
         const auth = Alpine.store('auth');
         if (auth.loggedIn && !data.user_id) {
-          await api(`/api/trips/${tripId}/claim`, { method: 'PUT' });
-        }
-
-        // Watch generating flag: when it goes false, init/resize map
-        this.$watch('generating', (val) => {
-          if (!val && this.trip) {
-            this.$nextTick(() => {
-              if (!this.map) {
-                this.initMap();
-              } else {
-                this.map.invalidateSize();
-                this.updateMarkers();
-              }
-            });
-          }
-        });
-
-        // If not generating, init map now
-        if (!this.generating) {
-          setTimeout(() => this.initMap(), 300);
+          api(`/api/trips/${tripId}/claim`, { method: 'PUT' });
         }
       },
 
@@ -527,7 +544,6 @@
             const data = await res.json();
             showToast(data.error || 'Generation failed', 'error');
             this.generating = false;
-            clearInterval(interval);
             return;
           }
 
@@ -543,42 +559,62 @@
         } catch (e) {
           showToast('Generation failed', 'error');
           this.generating = false;
+        } finally {
+          clearInterval(interval);
         }
-        clearInterval(interval);
       },
 
-      initMap() {
-        if (this.map) return;
+      _initMapAndReveal() {
+        if (this._revealed) return;
+
         const mapEl = document.getElementById('map');
         if (!mapEl) {
-          // Element not in DOM yet (x-if still rendering), retry
           if (!this._mapRetries) this._mapRetries = 0;
-          if (this._mapRetries++ < 20) setTimeout(() => this.initMap(), 200);
+          if (this._mapRetries++ < 20) {
+            setTimeout(() => this._initMapAndReveal(), 200);
+          } else {
+            showToast('Map failed to load', 'error');
+            this.loading = false;
+          }
           return;
         }
+        this._revealed = true;
 
-        // Set default view centered on destination so tiles load immediately
-        const destLat = this.trip?.destination_lat || 45;
-        const destLng = this.trip?.destination_lng || 12;
-        this.map = L.map('map', { zoomControl: true }).setView([destLat, destLng], 12);
+        // Create map if not already done
+        if (!this.map) {
+          const destLat = this.trip?.destination_lat || 45;
+          const destLng = this.trip?.destination_lng || 12;
+          this.map = L.map('map', { zoomControl: true }).setView([destLat, destLng], 12);
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '&copy; OpenStreetMap contributors',
-          maxZoom: 19,
-        }).addTo(this.map);
+          const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 19,
+          }).addTo(this.map);
 
-        // Hide loader once tiles are visible
-        const loader = document.getElementById('map-loader');
-        if (loader) {
-          this.map.once('moveend', () => { loader.style.display = 'none'; });
-          setTimeout(() => { if (loader) loader.style.display = 'none'; }, 4000);
-        }
+          // Wait for tiles + markers, then reveal everything at once
+          const reveal = () => {
+            if (this._didReveal) return;
+            this._didReveal = true;
+            const loader = document.getElementById('map-loader');
+            if (loader) loader.style.display = 'none';
+            this.loading = false;
+          };
 
-        // invalidateSize + markers after layout settles
-        setTimeout(() => {
+          tileLayer.once('load', () => {
+            setTimeout(reveal, 100);
+          });
+          // Fallback: reveal after 2.5s even if tiles are slow
+          setTimeout(reveal, 2500);
+
+          setTimeout(() => {
+            this.map.invalidateSize();
+            this.updateMarkers();
+          }, 300);
+        } else {
           this.map.invalidateSize();
           this.updateMarkers();
-        }, 300);
+          this.loading = false;
+        }
       },
 
       updateMarkers() {
@@ -603,18 +639,17 @@
           latlngs.push(ll);
 
           const isPinned = a.pinned;
+          const tc = this._typeConfig(a.type);
+          const bg = isPinned ? 'var(--amber-100)' : tc.bg;
+          const border = isPinned ? 'var(--amber-400)' : tc.border;
           const icon = L.divIcon({
             className: 'wandr-marker',
-            html: `<div style="
-              width:32px;height:32px;border-radius:50%;
-              display:flex;align-items:center;justify-content:center;
-              font-size:13px;font-weight:700;font-family:'DM Sans',sans-serif;
-              color:#fff;background:${isPinned ? '#ffc933' : '#087d6b'};
-              border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.2);
-              ${isPinned ? 'color:#242220;' : ''}
-            ">${a.order}</div>`,
-            iconSize: [32, 32],
-            iconAnchor: [16, 16],
+            html: `<div class="wandr-marker-inner" style="background:${bg};border:2.5px solid ${border}">
+              <span class="wandr-marker-emoji">${tc.emoji}</span>
+              <span class="wandr-marker-num">${a.order}</span>
+            </div>`,
+            iconSize: [36, 36],
+            iconAnchor: [18, 18],
           });
 
           const marker = L.marker(ll, { icon }).addTo(this.map);
@@ -698,6 +733,7 @@
 
       async refreshDay() {
         this.refreshing = true;
+        this.refreshError = '';
         const tripId = new URLSearchParams(window.location.search).get('id');
         const pinned = this.currentActivities.filter(a => a.pinned);
 
@@ -708,23 +744,82 @@
           });
 
           if (!res.ok) {
-            const data = await res.json();
-            showToast(data.error || 'Refresh failed', 'error');
+            let errMsg = 'Refresh failed';
+            try { const data = await res.json(); errMsg = data.error || errMsg; } catch {}
+            if (errMsg.includes('429') || errMsg.includes('rate') || errMsg.includes('quota')) {
+              this.refreshError = 'AI rate limit reached. Please wait a few minutes and try again.';
+            } else {
+              this.refreshError = 'Refresh failed. Please try again later.';
+            }
             this.refreshing = false;
             return;
           }
 
           const data = await res.json();
-          // Update day data
           const day = this.days.find(d => d.day_number === this.currentDay);
           if (day) day.activities_json = JSON.stringify(data.activities);
 
           showToast('Activities refreshed!', 'success');
           this.$nextTick(() => this.updateMarkers());
         } catch (e) {
-          showToast('Refresh failed', 'error');
+          this.refreshError = 'Connection error. Please check your network and try again.';
         }
         this.refreshing = false;
+      },
+
+      _getTransportPrefs() {
+        if (!this.trip) return ['walking'];
+        try {
+          const p = JSON.parse(this.trip.preferences_json || '{}');
+          const t = p.transport;
+          return Array.isArray(t) ? t : (t ? [t] : ['walking']);
+        } catch { return ['walking']; }
+      },
+
+      removeActivity(activity) {
+        const day = this.days.find(d => d.day_number === this.currentDay);
+        if (!day) return;
+        let activities = JSON.parse(day.activities_json);
+        const idx = activities.findIndex(a => a.id === activity.id);
+        if (idx < 0) return;
+
+        activities.splice(idx, 1);
+        // Re-number order
+        activities.forEach((a, i) => a.order = i + 1);
+
+        // Recalc transport for the new adjacency
+        if (idx > 0 && idx < activities.length) {
+          const prev = activities[idx - 1];
+          const next = activities[idx];
+          prev.travel_to_next = estimateTransport(prev, next, this._getTransportPrefs());
+        }
+        // Clear travel_to_next on new last activity
+        if (activities.length > 0) {
+          delete activities[activities.length - 1].travel_to_next;
+        }
+
+        day.activities_json = JSON.stringify(activities);
+        this.saveDay();
+        this.editingTransport = null;
+        this.$nextTick(() => this.updateMarkers());
+        showToast('Activity removed', 'success');
+      },
+
+      changeTransportMode(activity, newMode) {
+        const day = this.days.find(d => d.day_number === this.currentDay);
+        if (!day) return;
+        let activities = JSON.parse(day.activities_json);
+        const idx = activities.findIndex(a => a.id === activity.id);
+        if (idx < 0 || idx >= activities.length - 1) return;
+
+        const next = activities[idx + 1];
+        activities[idx].travel_to_next = estimateTransport(
+          activities[idx], next, this._getTransportPrefs(), newMode
+        );
+
+        day.activities_json = JSON.stringify(activities);
+        this.saveDay();
+        this.editingTransport = null;
       },
 
       async shareTrip() {
