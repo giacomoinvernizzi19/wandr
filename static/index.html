@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wandr — AI Travel Itinerary Planner</title>
+  <meta name="description" content="Plan your perfect trip in minutes. Answer 10 questions, get a day-by-day itinerary with local gems on a beautiful map.">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="manifest" href="/manifest.json">
+  <style>
+    .hero-features {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--space-6);
+      margin-top: var(--space-16);
+      text-align: left;
+    }
+    .hero-feature {
+      padding: var(--space-6);
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+    }
+    .hero-feature-icon {
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--primary-light);
+      color: var(--primary);
+      border-radius: var(--radius-md);
+      font-size: 1.5rem;
+      margin-bottom: var(--space-4);
+    }
+    .hero-feature h3 {
+      font-size: var(--text-lg);
+      margin-bottom: var(--space-2);
+    }
+    .hero-feature p {
+      font-size: var(--text-sm);
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+    @media (max-width: 768px) {
+      .hero-features { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav" id="main-nav"></nav>
+
+  <section class="hero">
+    <div class="hero-bg"></div>
+    <div class="hero-content">
+      <h1 class="display-xl">
+        Travel like a <em>local</em>,<br>plan like a pro.
+      </h1>
+      <p class="subtitle">
+        Answer 10 quick questions about your trip. Our AI builds a day-by-day itinerary with hidden gems, local favorites, and everything pinned on a beautiful map.
+      </p>
+      <div style="display:flex;gap:var(--space-3);justify-content:center;flex-wrap:wrap">
+        <a href="/plan" class="btn btn-accent btn-lg">Plan my trip</a>
+        <a href="#how" class="btn btn-secondary btn-lg">How it works</a>
+      </div>
+
+      <div class="hero-features" id="how">
+        <div class="hero-feature">
+          <div class="hero-feature-icon">?</div>
+          <h3>10 Quick Questions</h3>
+          <p>Tell us where, when, your budget, interests, and travel style. Takes about 2 minutes.</p>
+        </div>
+        <div class="hero-feature">
+          <div class="hero-feature-icon" style="background:var(--accent-light);color:var(--accent)">*</div>
+          <h3>AI-Powered Itinerary</h3>
+          <p>Gemini AI with real-time search creates authentic, anti-tourist-trap day plans with coordinates.</p>
+        </div>
+        <div class="hero-feature">
+          <div class="hero-feature-icon" style="background:var(--warm-light);color:var(--amber-600)">M</div>
+          <h3>Pin, Refresh, Share</h3>
+          <p>Love a spot? Pin it. Don't like a suggestion? Refresh just the unpinned activities. Share with friends.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your Trip — Wandr</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    [x-cloak] { display: none !important; }
+    #map { width: 100%; height: 100%; }
+    .leaflet-marker-icon { transition: transform 0.15s ease; }
+    .marker-highlight { transform: scale(1.4) !important; z-index: 1000 !important; }
+    .day-header { padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--border-light); }
+    .day-header h3 { font-size: var(--text-lg); margin-bottom: var(--space-1); }
+    .day-header-date { font-size: var(--text-sm); color: var(--text-tertiary); }
+    .refresh-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: var(--space-3) var(--space-5); background: var(--sand-100);
+      border-bottom: 1px solid var(--border-light);
+    }
+    .refresh-bar span { font-size: var(--text-xs); color: var(--text-tertiary); }
+    .save-sign-in {
+      padding: var(--space-4) var(--space-5); background: var(--primary-light);
+      border-bottom: 1px solid var(--teal-200); text-align: center;
+    }
+    .save-sign-in p { font-size: var(--text-sm); color: var(--teal-800); margin-bottom: var(--space-3); }
+    .cost-badge { font-size: var(--text-xs); font-weight: 600; padding: 2px 6px; border-radius: var(--radius-sm); }
+    .cost-free { background: var(--teal-100); color: var(--teal-700); }
+    .cost-low { background: var(--amber-100); color: var(--amber-700); }
+    .cost-mid { background: var(--coral-100); color: var(--coral-700); }
+    .cost-high { background: var(--coral-200); color: var(--coral-800); }
+
+    .score-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: var(--text-xs); padding: 3px 8px;
+      border-radius: var(--radius-full);
+      background: linear-gradient(90deg, var(--teal-100) var(--score-pct, 50%), var(--sand-100) var(--score-pct, 50%));
+      border: 1px solid var(--border-light);
+    }
+    .score-label { color: var(--text-tertiary); }
+    .score-value { font-weight: 700; color: var(--teal-700); }
+
+    .activity-link {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: var(--text-xs); font-weight: 500;
+      color: var(--primary); text-decoration: none;
+      padding: 2px 8px; border-radius: var(--radius-sm);
+      border: 1px solid var(--teal-200);
+      transition: background 0.15s;
+    }
+    .activity-link:hover { background: var(--teal-100); }
+
+    .pin-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      margin-top: var(--space-3); padding: 6px 12px;
+      font-size: var(--text-xs); font-weight: 500;
+      color: var(--text-tertiary); background: var(--sand-100);
+      border: 1px dashed var(--border-medium); border-radius: var(--radius-sm);
+      cursor: pointer; transition: all 0.15s;
+    }
+    .pin-btn:hover { background: var(--amber-100); border-color: var(--amber-400); color: var(--amber-700); }
+    .pin-btn.pinned {
+      background: var(--amber-100); border: 1px solid var(--amber-400);
+      color: var(--amber-700); border-style: solid;
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav" id="main-nav"></nav>
+
+  <div x-data="tripView()" x-init="init()">
+    <!-- Generating overlay -->
+    <div x-show="generating" x-cloak class="generating-overlay" style="min-height:calc(100dvh - var(--nav-height))">
+      <div class="compass-loader"></div>
+      <div class="generating-text" x-text="generatingMsg"></div>
+      <div class="generating-sub">This usually takes 15-30 seconds</div>
+      <div class="progress-bar" style="max-width:300px">
+        <div class="progress-bar-fill" :style="`width:${generatingProgress}%`"></div>
+      </div>
+    </div>
+
+    <!-- Trip content -->
+    <div x-show="!generating && trip" x-cloak>
+      <div class="split-view">
+        <!-- List panel -->
+        <div class="split-panel split-list" :class="{ hidden: mobileView === 'map' }" id="list-panel">
+          <!-- Day tabs -->
+          <div style="padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--border-light)">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-2)">
+              <h2 style="font-size:var(--text-xl);font-family:var(--font-display)" x-text="trip.destination"></h2>
+              <div style="display:flex;gap:var(--space-2)">
+                <button class="btn btn-ghost btn-sm" @click="tlDay = currentDay; tlSelected = null; timelineOpen = true" title="Timeline">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="4" rx="1"/><rect x="3" y="10" width="12" height="4" rx="1"/><rect x="3" y="16" width="15" height="4" rx="1"/></svg>
+                  Timeline
+                </button>
+                <button class="btn btn-ghost btn-sm" @click="shareTrip()" title="Share">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+                  Share
+                </button>
+              </div>
+            </div>
+            <div class="tabs">
+              <template x-for="d in days" :key="d.day_number">
+                <button class="tab" :class="{ active: currentDay === d.day_number }"
+                        @click="switchDay(d.day_number)">
+                  <span x-text="'Day ' + d.day_number"></span>
+                </button>
+              </template>
+            </div>
+          </div>
+
+          <!-- Sign in prompt for anonymous -->
+          <template x-if="!$store.auth.loggedIn">
+            <div class="save-sign-in">
+              <p>Sign in with Google to save this trip and access it later.</p>
+              <a href="/api/auth/google" class="btn-google">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="">
+                Sign in with Google
+              </a>
+            </div>
+          </template>
+
+          <!-- Refresh bar -->
+          <div class="refresh-bar">
+            <span x-text="pinnedCount + ' pinned'"></span>
+            <button class="btn btn-sm btn-secondary" @click="refreshDay()" :disabled="refreshing">
+              <template x-if="refreshing"><span>Refreshing...</span></template>
+              <template x-if="!refreshing"><span>Refresh unpinned</span></template>
+            </button>
+          </div>
+
+          <!-- Activities -->
+          <div id="activities-list">
+            <template x-for="a in currentActivities" :key="a.id">
+              <div class="activity-card" :class="{ pinned: a.pinned, highlighted: highlightedId === a.id }"
+                   :id="'activity-' + a.id"
+                   @mouseenter="highlightMarker(a.id)" @mouseleave="unhighlightMarker(a.id)">
+                <div class="activity-card-header">
+                  <div class="activity-number" x-text="a.order"></div>
+                  <div>
+                    <div class="activity-name" x-text="a.name"></div>
+                    <div class="activity-time" x-text="a.time_start + ' — ' + a.time_end + ' (' + a.duration_min + ' min)'"></div>
+                  </div>
+                </div>
+                <div class="activity-body">
+                  <div class="activity-desc" x-text="a.description"></div>
+                  <div class="tip-callout" style="margin-top:var(--space-3)" x-show="a.tip">
+                    <span class="tip-callout-icon">*</span>
+                    <span x-text="a.tip"></span>
+                  </div>
+                  <div class="activity-meta" style="margin-top:var(--space-3)">
+                    <span class="activity-tag" x-text="a.type"></span>
+                    <span class="cost-badge" :class="costClass(a.cost_level)" x-text="a.cost_level === 'free' ? 'Free' : a.cost_estimate"></span>
+                    <span class="activity-tag" x-show="a.address" x-text="a.address"></span>
+                  </div>
+
+                  <!-- Hidden gem score -->
+                  <div style="margin-top:var(--space-3)" x-show="a.hidden_gem_score">
+                    <div class="score-pill" :style="'--score-pct:' + (a.hidden_gem_score * 10) + '%'">
+                      <span class="score-label">Hidden gem</span>
+                      <span class="score-value" x-text="a.hidden_gem_score + '/10'"></span>
+                    </div>
+                  </div>
+
+                  <!-- Links -->
+                  <div style="display:flex;gap:var(--space-3);margin-top:var(--space-3);flex-wrap:wrap">
+                    <a x-show="a.website" :href="a.website" target="_blank" rel="noopener" class="activity-link">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                      Website
+                    </a>
+                    <a x-show="a.name" :href="'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(a.name + ' ' + (a.address || ''))" target="_blank" rel="noopener" class="activity-link">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                      Google Maps
+                    </a>
+                  </div>
+
+                  <div style="margin-top:var(--space-2);font-size:var(--text-xs);color:var(--text-tertiary);font-style:italic" x-text="a.why" x-show="a.why"></div>
+
+                  <!-- Pin button -->
+                  <button class="pin-btn" :class="{ pinned: a.pinned }" @click.stop="togglePin(a)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" :fill="a.pinned ? 'currentColor' : 'none'"/>
+                    </svg>
+                    <span x-text="a.pinned ? 'Pinned — kept on refresh' : 'Pin — keep on refresh'"></span>
+                  </button>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Map panel -->
+        <div class="split-map" :class="{ hidden: mobileView === 'list' }">
+          <div id="map"></div>
+          <div id="map-loader" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:var(--sand-100);z-index:400">
+            <div class="compass-loader" style="width:36px;height:36px"></div>
+          </div>
+        </div>
+
+        <!-- Mobile view toggle -->
+        <div class="view-toggle">
+          <button class="btn btn-ghost btn-sm" :class="{ active: mobileView === 'list' }" @click="setMobileView('list')">List</button>
+          <button class="btn btn-ghost btn-sm" :class="{ active: mobileView === 'map' }" @click="setMobileView('map')">Map</button>
+        </div>
+      </div>
+
+      <!-- Timeline Modal -->
+      <div x-show="timelineOpen" x-cloak class="tl-overlay" @keydown.escape.window="timelineOpen = false" @click.self="timelineOpen = false">
+        <div class="tl-modal" @click.stop>
+          <!-- Header -->
+          <div class="tl-header">
+            <div>
+              <h3 class="tl-title" x-text="trip.destination + ' — Timeline'"></h3>
+            </div>
+            <button class="btn btn-ghost btn-sm" @click="timelineOpen = false" style="margin-left:auto">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+
+          <!-- Day tabs -->
+          <div class="tl-tabs">
+            <template x-for="d in days" :key="'tl-' + d.day_number">
+              <button class="tab" :class="{ active: tlDay === d.day_number }" @click="tlDay = d.day_number; currentDay = d.day_number; tlSelected = null">
+                <span x-text="'Day ' + d.day_number"></span>
+              </button>
+            </template>
+          </div>
+
+          <!-- Timeline body -->
+          <div class="tl-body">
+            <!-- Time axis -->
+            <div class="tl-axis">
+              <template x-for="h in [8,9,10,11,12,13,14,15,16,17,18,19,20,21,22]" :key="'h'+h">
+                <div class="tl-axis-hour" :style="'left:' + ((h - 8) / 15 * 100) + '%'">
+                  <span x-text="h + ':00'"></span>
+                </div>
+              </template>
+            </div>
+
+            <!-- Bars -->
+            <div class="tl-bars" :style="'min-height:' + ((_tlRowCount || 1) * 50 + 6) + 'px'">
+              <template x-for="a in tlActivities" :key="'tl-a-' + a.id">
+                <div class="tl-bar" :class="'tl-type-' + a.type + (a.pinned ? ' tl-pinned' : '') + (tlSelected?.id === a.id ? ' tl-active' : '')"
+                     :style="tlBarStyle(a)" @click="tlSelected = a">
+                  <span class="tl-bar-pin" x-show="a.pinned">&#9733;</span>
+                  <span class="tl-bar-name" x-text="a.name"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- Detail panel -->
+          <div x-show="tlSelected" class="tl-detail">
+            <div class="tl-detail-header">
+              <div>
+                <div class="tl-detail-name" x-text="tlSelected?.name"></div>
+                <div class="tl-detail-time" x-text="(tlSelected?.time_start || '') + ' — ' + (tlSelected?.time_end || '') + ' (' + (tlSelected?.duration_min || '') + ' min)'"></div>
+              </div>
+              <div style="display:flex;gap:var(--space-2);align-items:center">
+                <span class="activity-tag" x-text="tlSelected?.type"></span>
+                <span class="cost-badge" :class="costClass(tlSelected?.cost_level)" x-text="tlSelected?.cost_level === 'free' ? 'Free' : tlSelected?.cost_estimate"></span>
+                <div class="score-pill" x-show="tlSelected?.hidden_gem_score" :style="'--score-pct:' + ((tlSelected?.hidden_gem_score || 0) * 10) + '%'">
+                  <span class="score-label">Gem</span>
+                  <span class="score-value" x-text="(tlSelected?.hidden_gem_score || 0) + '/10'"></span>
+                </div>
+              </div>
+            </div>
+            <div class="tl-detail-desc" x-text="tlSelected?.description"></div>
+            <div class="tip-callout" x-show="tlSelected?.tip" style="margin-top:var(--space-3)">
+              <span class="tip-callout-icon">*</span>
+              <span x-text="tlSelected?.tip"></span>
+            </div>
+            <div style="display:flex;gap:var(--space-3);margin-top:var(--space-3);flex-wrap:wrap">
+              <button class="pin-btn" :class="{ pinned: tlSelected?.pinned }" @click="togglePin(tlSelected); tlSelected = {...tlSelected, pinned: !tlSelected.pinned}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" :fill="tlSelected?.pinned ? 'currentColor' : 'none'"/>
+                </svg>
+                <span x-text="tlSelected?.pinned ? 'Pinned' : 'Pin'"></span>
+              </button>
+              <a x-show="tlSelected?.website" :href="tlSelected?.website" target="_blank" rel="noopener" class="activity-link">Website</a>
+              <a x-show="tlSelected?.name" :href="'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent((tlSelected?.name || '') + ' ' + (tlSelected?.address || ''))" target="_blank" rel="noopener" class="activity-link">Google Maps</a>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="tl-footer">
+            <button class="btn btn-sm btn-secondary" @click="refreshDay(); timelineOpen = false" :disabled="refreshing">Refresh unpinned</button>
+            <button class="btn btn-sm btn-ghost" @click="timelineOpen = false">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/app.js"></script>
+  <script>
+  function tripView() {
+    return {
+      trip: null,
+      days: [],
+      currentDay: 1,
+      generating: false,
+      generatingMsg: 'Creating your perfect itinerary...',
+      generatingProgress: 0,
+      refreshing: false,
+      highlightedId: null,
+      mobileView: 'list',
+      map: null,
+      markers: [],
+      polyline: null,
+      markerMap: {},
+      timelineOpen: false,
+      tlDay: 1,
+      tlSelected: null,
+
+      get currentActivities() {
+        const day = this.days.find(d => d.day_number === this.currentDay);
+        if (!day) return [];
+        try { return JSON.parse(day.activities_json); } catch { return []; }
+      },
+
+      get pinnedCount() {
+        return this.currentActivities.filter(a => a.pinned).length;
+      },
+
+      costClass(level) {
+        const map = { free: 'cost-free', '$': 'cost-low', '$$': 'cost-mid', '$$$': 'cost-high' };
+        return map[level] || 'cost-low';
+      },
+
+      get tlActivities() {
+        const day = this.days.find(d => d.day_number === this.tlDay);
+        if (!day) return [];
+        try { return JSON.parse(day.activities_json); } catch { return []; }
+      },
+
+      tlBarStyle(a) {
+        const toMin = (t) => { const [h, m] = (t || '9:00').split(':').map(Number); return h * 60 + (m || 0); };
+        const start = toMin(a.time_start);
+        const end = toMin(a.time_end);
+        const rangeStart = 480; // 8:00
+        const rangeEnd = 1380; // 23:00
+        const total = rangeEnd - rangeStart;
+        const left = Math.max(0, ((start - rangeStart) / total) * 100);
+        const width = Math.max(2, ((end - start) / total) * 100);
+        // Compute row to avoid overlaps
+        const row = this._tlRow(a);
+        const top = row * 50;
+        return `left:${left}%;width:${width}%;top:${top}px`;
+      },
+
+      _tlRow(a) {
+        // Simple greedy row assignment: for each activity, find the first row where it doesn't overlap
+        if (!this._tlRowCache || this._tlRowCacheDay !== this.tlDay) {
+          this._tlRowCacheDay = this.tlDay;
+          this._tlRowCache = {};
+          const toMin = (t) => { const [h, m] = (t || '9:00').split(':').map(Number); return h * 60 + (m || 0); };
+          const rows = []; // rows[r] = end time of last item in that row
+          for (const act of this.tlActivities) {
+            const s = toMin(act.time_start);
+            const e = toMin(act.time_end);
+            let placed = false;
+            for (let r = 0; r < rows.length; r++) {
+              if (s >= rows[r]) { rows[r] = e; this._tlRowCache[act.id] = r; placed = true; break; }
+            }
+            if (!placed) { this._tlRowCache[act.id] = rows.length; rows.push(e); }
+          }
+          this._tlRowCount = rows.length;
+        }
+        return this._tlRowCache[a.id] || 0;
+      },
+
+      async init() {
+        const params = new URLSearchParams(window.location.search);
+        const tripId = params.get('id');
+        if (!tripId) { window.location.href = '/'; return; }
+
+        // Load trip
+        const data = await apiJson(`/api/trips/${tripId}`);
+        if (!data || data.error) {
+          showToast('Trip not found', 'error');
+          window.location.href = '/';
+          return;
+        }
+
+        const needsGeneration = (data.days || []).length === 0 && data.status !== 'complete';
+
+        // Set generating BEFORE trip to avoid DOM flash
+        if (needsGeneration) this.generating = true;
+
+        this.trip = data;
+        this.days = data.days || [];
+
+        if (needsGeneration) {
+          await this.generateTrip(tripId);
+        }
+
+        // Claim trip for logged-in user
+        const auth = Alpine.store('auth');
+        if (auth.loggedIn && !data.user_id) {
+          await api(`/api/trips/${tripId}/claim`, { method: 'PUT' });
+        }
+
+        // Watch generating flag: when it goes false, init/resize map
+        this.$watch('generating', (val) => {
+          if (!val && this.trip) {
+            this.$nextTick(() => {
+              if (!this.map) {
+                this.initMap();
+              } else {
+                this.map.invalidateSize();
+                this.updateMarkers();
+              }
+            });
+          }
+        });
+
+        // If not generating, init map now
+        if (!this.generating) {
+          setTimeout(() => this.initMap(), 300);
+        }
+      },
+
+      async generateTrip(tripId) {
+        this.generating = true;
+        this.generatingProgress = 5;
+
+        // Simulate progress while waiting
+        const interval = setInterval(() => {
+          if (this.generatingProgress < 85) {
+            this.generatingProgress += Math.random() * 8;
+            const dayEstimate = Math.ceil(this.generatingProgress / (100 / (this.trip?.num_days || 3)));
+            this.generatingMsg = `Planning day ${Math.min(dayEstimate, this.trip?.num_days || 3)} of ${this.trip?.num_days || 3}...`;
+          }
+        }, 1500);
+
+        try {
+          const res = await api(`/api/trips/${tripId}/generate`, { method: 'POST' });
+          if (!res.ok) {
+            const data = await res.json();
+            showToast(data.error || 'Generation failed', 'error');
+            this.generating = false;
+            clearInterval(interval);
+            return;
+          }
+
+          this.generatingProgress = 100;
+          this.generatingMsg = 'Your itinerary is ready!';
+
+          // Reload trip data
+          const freshData = await apiJson(`/api/trips/${tripId}`);
+          this.trip = freshData;
+          this.days = freshData.days || [];
+          // $watch on generating handles map init
+          this.generating = false;
+        } catch (e) {
+          showToast('Generation failed', 'error');
+          this.generating = false;
+        }
+        clearInterval(interval);
+      },
+
+      initMap() {
+        if (this.map) return;
+        const mapEl = document.getElementById('map');
+        if (!mapEl) {
+          // Element not in DOM yet (x-if still rendering), retry
+          if (!this._mapRetries) this._mapRetries = 0;
+          if (this._mapRetries++ < 20) setTimeout(() => this.initMap(), 200);
+          return;
+        }
+
+        // Set default view centered on destination so tiles load immediately
+        const destLat = this.trip?.destination_lat || 45;
+        const destLng = this.trip?.destination_lng || 12;
+        this.map = L.map('map', { zoomControl: true }).setView([destLat, destLng], 12);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap contributors',
+          maxZoom: 19,
+        }).addTo(this.map);
+
+        // Hide loader once tiles are visible
+        const loader = document.getElementById('map-loader');
+        if (loader) {
+          this.map.once('moveend', () => { loader.style.display = 'none'; });
+          setTimeout(() => { if (loader) loader.style.display = 'none'; }, 4000);
+        }
+
+        // invalidateSize + markers after layout settles
+        setTimeout(() => {
+          this.map.invalidateSize();
+          this.updateMarkers();
+        }, 300);
+      },
+
+      updateMarkers() {
+        if (!this.map) return;
+
+        // Clear existing
+        this.markers.forEach(m => this.map.removeLayer(m));
+        this.markers = [];
+        this.markerMap = {};
+        if (this.polyline) { this.map.removeLayer(this.polyline); this.polyline = null; }
+
+        const activities = this.currentActivities;
+        if (!activities.length) return;
+
+        const bounds = [];
+        const latlngs = [];
+
+        activities.forEach((a, i) => {
+          if (!a.lat || !a.lng || (a.lat === 0 && a.lng === 0)) return;
+          const ll = [a.lat, a.lng];
+          bounds.push(ll);
+          latlngs.push(ll);
+
+          const isPinned = a.pinned;
+          const icon = L.divIcon({
+            className: 'wandr-marker',
+            html: `<div style="
+              width:32px;height:32px;border-radius:50%;
+              display:flex;align-items:center;justify-content:center;
+              font-size:13px;font-weight:700;font-family:'DM Sans',sans-serif;
+              color:#fff;background:${isPinned ? '#ffc933' : '#087d6b'};
+              border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.2);
+              ${isPinned ? 'color:#242220;' : ''}
+            ">${a.order}</div>`,
+            iconSize: [32, 32],
+            iconAnchor: [16, 16],
+          });
+
+          const marker = L.marker(ll, { icon }).addTo(this.map);
+          const popupEl = document.createElement('div');
+          const s = (t) => document.createTextNode(t);
+          const strong = document.createElement('strong'); strong.appendChild(s(a.name)); popupEl.appendChild(strong);
+          popupEl.appendChild(document.createElement('br'));
+          const small = document.createElement('small'); small.appendChild(s(a.time_start + ' — ' + a.time_end)); popupEl.appendChild(small);
+          popupEl.appendChild(document.createElement('br'));
+          const em = document.createElement('em'); em.appendChild(s(a.description)); popupEl.appendChild(em);
+          marker.bindPopup(popupEl, { autoPan: false });
+
+          marker.on('click', () => {
+            const el = document.getElementById('activity-' + a.id);
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          });
+
+          this.markers.push(marker);
+          this.markerMap[a.id] = marker;
+        });
+
+        // Polyline
+        if (latlngs.length > 1) {
+          this.polyline = L.polyline(latlngs, {
+            color: '#087d6b',
+            weight: 2,
+            opacity: 0.5,
+            dashArray: '8, 8',
+          }).addTo(this.map);
+        }
+
+        // Fit bounds
+        if (bounds.length > 0) {
+          this.map.fitBounds(bounds, { padding: [30, 30] });
+        }
+      },
+
+      switchDay(dayNum) {
+        this.currentDay = dayNum;
+        this.tlDay = dayNum;
+        this.tlSelected = null;
+        this.$nextTick(() => this.updateMarkers());
+      },
+
+      highlightMarker(id) {
+        this.highlightedId = id;
+        const marker = this.markerMap[id];
+        if (marker) {
+          const el = marker.getElement();
+          if (el) el.classList.add('marker-highlight');
+        }
+      },
+
+      unhighlightMarker(id) {
+        this.highlightedId = null;
+        const marker = this.markerMap[id];
+        if (marker) {
+          const el = marker.getElement();
+          if (el) el.classList.remove('marker-highlight');
+        }
+      },
+
+      togglePin(activity) {
+        const day = this.days.find(d => d.day_number === this.currentDay);
+        if (!day) return;
+        const activities = JSON.parse(day.activities_json);
+        const target = activities.find(a => a.id === activity.id);
+        if (target) target.pinned = !target.pinned;
+        day.activities_json = JSON.stringify(activities);
+        this.saveDay();
+        this.$nextTick(() => this.updateMarkers());
+      },
+
+      async saveDay() {
+        const tripId = new URLSearchParams(window.location.search).get('id');
+        await api(`/api/trips/${tripId}/days/${this.currentDay}`, {
+          method: 'PUT',
+          body: JSON.stringify({ activities: this.currentActivities }),
+        });
+      },
+
+      async refreshDay() {
+        this.refreshing = true;
+        const tripId = new URLSearchParams(window.location.search).get('id');
+        const pinned = this.currentActivities.filter(a => a.pinned);
+
+        try {
+          const res = await api(`/api/trips/${tripId}/days/${this.currentDay}/refresh`, {
+            method: 'POST',
+            body: JSON.stringify({ pinned_activities: pinned }),
+          });
+
+          if (!res.ok) {
+            const data = await res.json();
+            showToast(data.error || 'Refresh failed', 'error');
+            this.refreshing = false;
+            return;
+          }
+
+          const data = await res.json();
+          // Update day data
+          const day = this.days.find(d => d.day_number === this.currentDay);
+          if (day) day.activities_json = JSON.stringify(data.activities);
+
+          showToast('Activities refreshed!', 'success');
+          this.$nextTick(() => this.updateMarkers());
+        } catch (e) {
+          showToast('Refresh failed', 'error');
+        }
+        this.refreshing = false;
+      },
+
+      async shareTrip() {
+        if (!this.trip?.share_slug) return;
+        const url = `${window.location.origin}/share?s=${this.trip.share_slug}`;
+        try {
+          await navigator.clipboard.writeText(url);
+          showToast('Share link copied!', 'success');
+        } catch {
+          prompt('Copy this link:', url);
+        }
+      },
+
+      setMobileView(v) {
+        this.mobileView = v;
+        if (v === 'map') {
+          this.$nextTick(() => {
+            if (this.map) this.map.invalidateSize();
+          });
+        }
+      },
+    };
+  }
+  </script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "name": "Wandr",
+  "short_name": "Wandr",
+  "description": "AI Travel Itinerary Planner",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fdfcfa",
+  "theme_color": "#087d6b",
+  "icons": []
+}

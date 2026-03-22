@@ -1,0 +1,14 @@
+name = "wandr"
+account_id = "73412abec77058e68525a5deca8cf8d0"
+main = "src/index.ts"
+compatibility_date = "2024-09-25"
+
+[assets]
+directory = "static"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "wandr"
+database_id = "b9821145-3bdd-4387-a2c0-da68ee32554e"

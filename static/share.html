@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shared Trip — Wandr</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    #map { width: 100%; height: 100%; }
+    .day-header { padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--border-light); }
+    .cost-badge { font-size: var(--text-xs); font-weight: 600; padding: 2px 6px; border-radius: var(--radius-sm); }
+    .cost-free { background: var(--teal-100); color: var(--teal-700); }
+    .cost-low { background: var(--amber-100); color: var(--amber-700); }
+    .cost-mid { background: var(--coral-100); color: var(--coral-700); }
+    .cost-high { background: var(--coral-200); color: var(--coral-800); }
+  </style>
+</head>
+<body>
+  <nav class="nav" id="main-nav"></nav>
+
+  <div x-data="shareView()" x-init="init()">
+    <template x-if="loading">
+      <div class="generating-overlay" style="min-height:calc(100dvh - var(--nav-height))">
+        <div class="compass-loader"></div>
+        <div class="generating-text">Loading shared trip...</div>
+      </div>
+    </template>
+
+    <template x-if="!loading && !trip">
+      <div class="empty-state" style="min-height:calc(100dvh - var(--nav-height))">
+        <h3>Trip not found</h3>
+        <p>This link may have expired or be invalid.</p>
+        <a href="/" class="btn btn-primary" style="margin-top:var(--space-4)">Go home</a>
+      </div>
+    </template>
+
+    <template x-if="!loading && trip">
+      <div>
+        <div class="share-banner">
+          <span>Shared by <strong x-text="trip.creator_name"></strong></span>
+          <a href="/plan" class="btn btn-sm btn-primary">Plan your own trip</a>
+        </div>
+
+        <div class="split-view" style="height:calc(100dvh - var(--nav-height) - 48px)">
+          <div class="split-panel split-list" :class="{ hidden: mobileView === 'map' }">
+            <div style="padding:var(--space-4);border-bottom:1px solid var(--border-light)">
+              <h2 style="font-size:var(--text-xl);font-family:var(--font-display)" x-text="trip.destination"></h2>
+              <p style="font-size:var(--text-sm);color:var(--text-secondary)" x-text="trip.num_days + ' day' + (trip.num_days > 1 ? 's' : '')"></p>
+              <div class="tabs" style="margin-top:var(--space-3)">
+                <template x-for="d in days" :key="d.day_number">
+                  <button class="tab" :class="{ active: currentDay === d.day_number }"
+                          @click="switchDay(d.day_number)" x-text="'Day ' + d.day_number"></button>
+                </template>
+              </div>
+            </div>
+
+            <div id="activities-list">
+              <template x-for="a in currentActivities" :key="a.id">
+                <div class="activity-card" @mouseenter="highlightMarker(a.id)" @mouseleave="unhighlightMarker(a.id)">
+                  <div class="activity-card-header">
+                    <div class="activity-number" :style="a.pinned ? 'background:var(--amber-400);color:var(--sand-900)' : ''" x-text="a.order"></div>
+                    <div>
+                      <div class="activity-name" x-text="a.name"></div>
+                      <div class="activity-time" x-text="a.time_start + ' — ' + a.time_end"></div>
+                    </div>
+                  </div>
+                  <div class="activity-body">
+                    <div class="activity-desc" x-text="a.description"></div>
+                    <div class="activity-meta" style="margin-top:var(--space-2)">
+                      <span class="activity-tag" x-text="a.type"></span>
+                      <span class="cost-badge" :class="a.cost_level === 'free' ? 'cost-free' : a.cost_level === '$' ? 'cost-low' : a.cost_level === '$$' ? 'cost-mid' : 'cost-high'" x-text="a.cost_level === 'free' ? 'Free' : a.cost_estimate"></span>
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div class="split-map" :class="{ hidden: mobileView === 'list' }">
+            <div id="map"></div>
+          </div>
+
+          <div class="view-toggle">
+            <button class="btn btn-ghost btn-sm" :class="{ active: mobileView === 'list' }" @click="setMobileView('list')">List</button>
+            <button class="btn btn-ghost btn-sm" :class="{ active: mobileView === 'map' }" @click="setMobileView('map')">Map</button>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/app.js"></script>
+  <script>
+  function shareView() {
+    return {
+      trip: null,
+      days: [],
+      currentDay: 1,
+      loading: true,
+      mobileView: 'list',
+      map: null,
+      markers: [],
+      polyline: null,
+      markerMap: {},
+
+      get currentActivities() {
+        const day = this.days.find(d => d.day_number === this.currentDay);
+        if (!day) return [];
+        try { return JSON.parse(day.activities_json); } catch { return []; }
+      },
+
+      async init() {
+        const params = new URLSearchParams(window.location.search);
+        const slug = params.get('s');
+        if (!slug) { this.loading = false; return; }
+
+        try {
+          const data = await apiJson(`/api/share/${slug}`);
+          if (!data || data.error) { this.loading = false; return; }
+          this.trip = data;
+          this.days = data.days || [];
+          document.title = `${data.destination} — Wandr`;
+        } catch { /* */ }
+        this.loading = false;
+        this.$nextTick(() => this.initMap());
+      },
+
+      initMap() {
+        const mapEl = document.getElementById('map');
+        if (!mapEl || this.map) return;
+        this.map = L.map('map');
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap',
+          maxZoom: 19,
+        }).addTo(this.map);
+        this.updateMarkers();
+      },
+
+      updateMarkers() {
+        if (!this.map) return;
+        this.markers.forEach(m => this.map.removeLayer(m));
+        this.markers = [];
+        this.markerMap = {};
+        if (this.polyline) { this.map.removeLayer(this.polyline); this.polyline = null; }
+
+        const activities = this.currentActivities;
+        const bounds = [];
+        const latlngs = [];
+
+        activities.forEach(a => {
+          if (!a.lat || !a.lng) return;
+          const ll = [a.lat, a.lng];
+          bounds.push(ll);
+          latlngs.push(ll);
+
+          const icon = L.divIcon({
+            className: 'wandr-marker',
+            html: `<div style="width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;font-family:'DM Sans',sans-serif;color:#fff;background:${a.pinned ? '#ffc933' : '#087d6b'};border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.2);${a.pinned ? 'color:#242220;' : ''}">${a.order}</div>`,
+            iconSize: [28, 28], iconAnchor: [14, 14],
+          });
+
+          const marker = L.marker(ll, { icon }).addTo(this.map);
+          const popupEl = document.createElement('div');
+          const strong = document.createElement('strong'); strong.textContent = a.name; popupEl.appendChild(strong);
+          popupEl.appendChild(document.createElement('br'));
+          const small = document.createElement('small'); small.textContent = a.time_start + '-' + a.time_end; popupEl.appendChild(small);
+          marker.bindPopup(popupEl, { autoPan: false });
+          this.markers.push(marker);
+          this.markerMap[a.id] = marker;
+        });
+
+        if (latlngs.length > 1) {
+          this.polyline = L.polyline(latlngs, { color: '#087d6b', weight: 2, opacity: 0.5, dashArray: '8, 8' }).addTo(this.map);
+        }
+        if (bounds.length > 0) this.map.fitBounds(bounds, { padding: [30, 30] });
+      },
+
+      switchDay(n) { this.currentDay = n; this.$nextTick(() => this.updateMarkers()); },
+
+      highlightMarker(id) {
+        const m = this.markerMap[id]; if (m) { const el = m.getElement(); if (el) el.style.transform = 'scale(1.4)'; }
+      },
+      unhighlightMarker(id) {
+        const m = this.markerMap[id]; if (m) { const el = m.getElement(); if (el) el.style.transform = ''; }
+      },
+
+      setMobileView(v) {
+        this.mobileView = v;
+        if (v === 'map') this.$nextTick(() => { if (this.map) this.map.invalidateSize(); });
+      },
+    };
+  }
+  </script>
+</body>
+</html>

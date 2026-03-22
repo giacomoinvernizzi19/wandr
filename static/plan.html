@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Plan Your Trip — Wandr</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <nav class="nav" id="main-nav"></nav>
+
+  <div class="questionnaire" x-data="questionnaire()">
+    <!-- Progress -->
+    <div class="questionnaire-progress">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-2)">
+        <span class="progress-step-counter"><span x-text="step"></span> / 10</span>
+        <button class="btn btn-ghost btn-sm" @click="step > 1 && step--" x-show="step > 1">Back</button>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-bar-fill" :style="`width: ${step * 10}%`"></div>
+      </div>
+    </div>
+
+    <!-- Steps -->
+    <div class="questionnaire-body">
+
+      <!-- Step 1: Destination -->
+      <div class="questionnaire-step" x-show="step === 1" x-transition>
+        <h2 class="questionnaire-question">Where do you want to go?</h2>
+        <p class="questionnaire-hint">Type a city, region, or country</p>
+        <div style="position:relative">
+          <input type="text" class="input input-lg" placeholder="e.g. Rome, Lisbon, Tokyo..."
+                 x-model="data.destination" @input.debounce.500ms="searchDestination()"
+                 @keydown.enter="suggestions.length && selectDestination(suggestions[0])">
+          <div class="autocomplete-dropdown" x-show="suggestions.length > 0" @click.outside="suggestions = []">
+            <template x-for="s in suggestions" :key="s.display">
+              <div class="autocomplete-item" @click="selectDestination(s)">
+                <strong x-text="s.name"></strong>
+                <span x-text="s.country || s.display"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+        <div class="pills" style="margin-top:var(--space-6)">
+          <span class="label" style="width:100%;margin-bottom:var(--space-2)">Popular</span>
+          <template x-for="d in popularDests" :key="d.name">
+            <button class="pill" :class="{ selected: data.destination === d.name }" @click="selectDestination(d)">
+              <span class="pill-icon" x-text="d.icon"></span>
+              <span x-text="d.name"></span>
+            </button>
+          </template>
+        </div>
+      </div>
+
+      <!-- Step 2: When & Duration -->
+      <div class="questionnaire-step" x-show="step === 2" x-transition>
+        <h2 class="questionnaire-question">When and how long?</h2>
+        <p class="questionnaire-hint">Pick dates or just a duration</p>
+        <div class="date-row">
+          <div class="input-group">
+            <label>Start date</label>
+            <input type="date" class="input" x-model="data.start_date" :disabled="data.flexible">
+          </div>
+          <div class="input-group">
+            <label>Days</label>
+            <div class="pills">
+              <template x-for="n in [1,2,3,4,5,6,7]" :key="n">
+                <button class="pill" :class="{ selected: data.num_days === n }" @click="data.num_days = n" x-text="n"></button>
+              </template>
+            </div>
+          </div>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle" :class="{ on: data.flexible }" @click="data.flexible = !data.flexible"></div>
+          <span style="font-size:var(--text-sm);color:var(--text-secondary)">I'm flexible on dates</span>
+        </div>
+      </div>
+
+      <!-- Step 3: Budget -->
+      <div class="questionnaire-step" x-show="step === 3" x-transition>
+        <h2 class="questionnaire-question">What's your budget style?</h2>
+        <p class="questionnaire-hint">This shapes restaurant picks, activities, and accommodation tips</p>
+        <div class="options-grid cols-3">
+          <template x-for="b in budgetOptions" :key="b.id">
+            <div class="option-card" :class="{ selected: data.budget === b.id }" @click="data.budget = b.id">
+              <div class="option-card-icon" x-text="b.icon"></div>
+              <div class="option-card-title" x-text="b.label"></div>
+              <div class="option-card-desc" x-text="b.desc"></div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Step 4: Companions -->
+      <div class="questionnaire-step" x-show="step === 4" x-transition>
+        <h2 class="questionnaire-question">Who's coming along?</h2>
+        <p class="questionnaire-hint">We'll tailor activity suggestions to your group</p>
+        <div class="options-grid cols-4">
+          <template x-for="c in companionOptions" :key="c.id">
+            <div class="option-card" :class="{ selected: data.companions === c.id }" @click="data.companions = c.id">
+              <div class="option-card-icon" x-text="c.icon"></div>
+              <div class="option-card-title" x-text="c.label"></div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Step 5: Intensity -->
+      <div class="questionnaire-step" x-show="step === 5" x-transition>
+        <h2 class="questionnaire-question">How packed should your days be?</h2>
+        <p class="questionnaire-hint">From lazy mornings to sunrise-to-midnight adventures</p>
+        <div class="slider-container">
+          <div class="slider-labels">
+            <span class="slider-label" :class="{ active: data.intensity <= 3 }">Relaxed</span>
+            <span class="slider-label" :class="{ active: data.intensity >= 4 && data.intensity <= 7 }">Balanced</span>
+            <span class="slider-label" :class="{ active: data.intensity >= 8 }">Intense</span>
+          </div>
+          <input type="range" min="1" max="10" x-model.number="data.intensity">
+          <div class="slider-value" x-text="data.intensity + ' / 10'"></div>
+        </div>
+      </div>
+
+      <!-- Step 6: Niche -->
+      <div class="questionnaire-step" x-show="step === 6" x-transition>
+        <h2 class="questionnaire-question">Tourist highlights or hidden gems?</h2>
+        <p class="questionnaire-hint">Should we include the classics or go full local?</p>
+        <div class="slider-container">
+          <div class="slider-labels">
+            <span class="slider-label" :class="{ active: data.niche <= 3 }">Mainstream</span>
+            <span class="slider-label" :class="{ active: data.niche >= 4 && data.niche <= 7 }">Mixed</span>
+            <span class="slider-label" :class="{ active: data.niche >= 8 }">Off the beaten path</span>
+          </div>
+          <input type="range" min="1" max="10" x-model.number="data.niche">
+          <div class="slider-value" x-text="data.niche + ' / 10'"></div>
+        </div>
+      </div>
+
+      <!-- Step 7: Interests -->
+      <div class="questionnaire-step" x-show="step === 7" x-transition>
+        <h2 class="questionnaire-question">What are you into?</h2>
+        <p class="questionnaire-hint">Pick all that apply — we'll weigh your itinerary accordingly</p>
+        <div class="pills" style="gap:var(--space-3)">
+          <template x-for="i in interestOptions" :key="i.id">
+            <button class="pill" :class="{ selected: data.interests.includes(i.id) }"
+                    @click="toggleInterest(i.id)" style="padding:var(--space-3) var(--space-5)">
+              <span class="pill-icon" x-text="i.icon"></span>
+              <span x-text="i.label"></span>
+            </button>
+          </template>
+        </div>
+      </div>
+
+      <!-- Step 8: Transport -->
+      <div class="questionnaire-step" x-show="step === 8" x-transition>
+        <h2 class="questionnaire-question">How do you get around?</h2>
+        <p class="questionnaire-hint">This affects how far apart we'll space activities</p>
+        <div class="options-grid cols-4">
+          <template x-for="t in transportOptions" :key="t.id">
+            <div class="option-card" :class="{ selected: data.transport === t.id }" @click="data.transport = t.id">
+              <div class="option-card-icon" x-text="t.icon"></div>
+              <div class="option-card-title" x-text="t.label"></div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Step 9: Accommodation -->
+      <div class="questionnaire-step" x-show="step === 9" x-transition>
+        <h2 class="questionnaire-question">Where are you staying?</h2>
+        <p class="questionnaire-hint">Optional — helps us plan activities near your base</p>
+        <input type="text" class="input input-lg" placeholder="Hotel name or neighborhood..."
+               x-model="data.accommodation">
+        <p style="font-size:var(--text-sm);color:var(--text-tertiary);margin-top:var(--space-3)">
+          You can skip this and add it later.
+        </p>
+      </div>
+
+      <!-- Step 10: Notes -->
+      <div class="questionnaire-step" x-show="step === 10" x-transition>
+        <h2 class="questionnaire-question">Anything else we should know?</h2>
+        <p class="questionnaire-hint">Dietary needs, accessibility, must-visit places, or things to avoid</p>
+        <textarea class="input" rows="4" placeholder="e.g. vegetarian, wheelchair accessible, must see the Colosseum..."
+                  x-model="data.notes"></textarea>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="questionnaire-footer">
+      <div style="font-size:var(--text-sm);color:var(--text-tertiary)">
+        <span x-show="step <= 8">Press Enter to continue</span>
+        <span x-show="step === 9">Optional</span>
+        <span x-show="step === 10">Optional</span>
+      </div>
+      <div style="display:flex;gap:var(--space-2)">
+        <button class="btn btn-secondary" x-show="step >= 9" @click="nextStep()">Skip</button>
+        <button class="btn btn-primary" @click="nextStep()" :disabled="!canProceed"
+                x-text="step === 10 ? 'Generate my trip' : 'Continue'"></button>
+      </div>
+    </div>
+  </div>
+
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/app.js"></script>
+  <script>
+  function questionnaire() {
+    return {
+      step: 1,
+      suggestions: [],
+      data: {
+        destination: '',
+        destination_lat: null,
+        destination_lng: null,
+        start_date: '',
+        num_days: 3,
+        flexible: false,
+        budget: '',
+        companions: '',
+        intensity: 5,
+        niche: 5,
+        interests: [],
+        transport: '',
+        accommodation: '',
+        notes: '',
+      },
+
+      popularDests: [
+        { name: 'Rome', icon: '🏛', lat: 41.9028, lng: 12.4964, country: 'Italy' },
+        { name: 'Barcelona', icon: '🎨', lat: 41.3874, lng: 2.1686, country: 'Spain' },
+        { name: 'Lisbon', icon: '🚋', lat: 38.7223, lng: -9.1393, country: 'Portugal' },
+        { name: 'Tokyo', icon: '🗼', lat: 35.6762, lng: 139.6503, country: 'Japan' },
+        { name: 'Paris', icon: '🥐', lat: 48.8566, lng: 2.3522, country: 'France' },
+        { name: 'Amsterdam', icon: '🚲', lat: 52.3676, lng: 4.9041, country: 'Netherlands' },
+        { name: 'Prague', icon: '🏰', lat: 50.0755, lng: 14.4378, country: 'Czech Republic' },
+        { name: 'Marrakech', icon: '🕌', lat: 31.6295, lng: -7.9811, country: 'Morocco' },
+      ],
+
+      budgetOptions: [
+        { id: 'backpacker', icon: '🎒', label: 'Backpacker', desc: 'Street food, free sights, hostels' },
+        { id: 'moderate', icon: '🧳', label: 'Moderate', desc: 'Nice restaurants, paid attractions, mid-range hotels' },
+        { id: 'luxury', icon: '💎', label: 'Luxury', desc: 'Fine dining, exclusive experiences, top hotels' },
+      ],
+
+      companionOptions: [
+        { id: 'solo', icon: '🧭', label: 'Solo' },
+        { id: 'couple', icon: '💑', label: 'Couple' },
+        { id: 'friends', icon: '👯', label: 'Friends' },
+        { id: 'family', icon: '👨‍👩‍👧‍👦', label: 'Family' },
+      ],
+
+      interestOptions: [
+        { id: 'food', icon: '🍽', label: 'Food & Drink' },
+        { id: 'art', icon: '🎨', label: 'Art & Culture' },
+        { id: 'nature', icon: '🌿', label: 'Nature' },
+        { id: 'nightlife', icon: '🌙', label: 'Nightlife' },
+        { id: 'shopping', icon: '🛍', label: 'Shopping' },
+        { id: 'adventure', icon: '🧗', label: 'Adventure' },
+        { id: 'history', icon: '📜', label: 'History' },
+        { id: 'photography', icon: '📷', label: 'Photography' },
+      ],
+
+      transportOptions: [
+        { id: 'walking', icon: '🚶', label: 'Walking' },
+        { id: 'public', icon: '🚇', label: 'Public Transit' },
+        { id: 'car', icon: '🚗', label: 'Car' },
+        { id: 'mix', icon: '🔀', label: 'Mix' },
+      ],
+
+      get canProceed() {
+        if (this.step === 1) return this.data.destination.length > 0;
+        if (this.step === 2) return this.data.num_days > 0;
+        if (this.step === 3) return this.data.budget !== '';
+        if (this.step === 4) return this.data.companions !== '';
+        if (this.step === 7) return this.data.interests.length > 0;
+        if (this.step === 8) return this.data.transport !== '';
+        return true;
+      },
+
+      async searchDestination() {
+        if (this.data.destination.length < 2) { this.suggestions = []; return; }
+        try {
+          const results = await apiJson(`/api/geocode?q=${encodeURIComponent(this.data.destination)}`);
+          this.suggestions = results || [];
+        } catch { this.suggestions = []; }
+      },
+
+      selectDestination(s) {
+        this.data.destination = s.name;
+        this.data.destination_lat = s.lat;
+        this.data.destination_lng = s.lng;
+        this.suggestions = [];
+      },
+
+      toggleInterest(id) {
+        const idx = this.data.interests.indexOf(id);
+        if (idx >= 0) this.data.interests.splice(idx, 1);
+        else this.data.interests.push(id);
+      },
+
+      async nextStep() {
+        if (!this.canProceed && this.step <= 8) return;
+
+        if (this.step < 10) {
+          this.step++;
+          return;
+        }
+
+        // Submit
+        try {
+          const payload = {
+            destination: this.data.destination,
+            destination_lat: this.data.destination_lat,
+            destination_lng: this.data.destination_lng,
+            start_date: this.data.flexible ? null : this.data.start_date || null,
+            end_date: null,
+            num_days: this.data.num_days,
+            preferences: { ...this.data },
+          };
+
+          if (payload.start_date && payload.num_days) {
+            const end = new Date(payload.start_date);
+            end.setDate(end.getDate() + payload.num_days - 1);
+            payload.end_date = end.toISOString().substring(0, 10);
+          }
+
+          const res = await api('/api/trips', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+          });
+
+          if (!res.ok) {
+            const data = await res.json();
+            showToast(data.error || 'Failed to create trip', 'error');
+            return;
+          }
+
+          const { id } = await res.json();
+
+          // Store pending trip for anonymous users
+          const auth = Alpine.store('auth');
+          if (!auth.loggedIn) {
+            document.cookie = `pending_trip=${id}; Path=/; Max-Age=3600; SameSite=Lax`;
+          }
+
+          window.location.href = `/trip?id=${id}`;
+        } catch (e) {
+          showToast('Something went wrong', 'error');
+        }
+      },
+
+      init() {
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' && !e.shiftKey && this.canProceed) {
+            e.preventDefault();
+            this.nextStep();
+          }
+        });
+      },
+    };
+  }
+  </script>
+</body>
+</html>

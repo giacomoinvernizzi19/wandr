@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Trips — Wandr</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <nav class="nav" id="main-nav"></nav>
+
+  <div x-data="myTrips()" x-init="init()">
+    <div class="page-header container">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <h1>My Trips</h1>
+          <p class="subtitle" x-text="trips.length ? trips.length + ' trip' + (trips.length > 1 ? 's' : '') : ''"></p>
+        </div>
+        <a href="/plan" class="btn btn-primary">Plan a new trip</a>
+      </div>
+    </div>
+
+    <!-- Loading -->
+    <div class="trip-grid container" x-show="loading">
+      <div class="skeleton skeleton-card" style="height:250px"></div>
+      <div class="skeleton skeleton-card" style="height:250px"></div>
+      <div class="skeleton skeleton-card" style="height:250px"></div>
+    </div>
+
+    <!-- Empty state -->
+    <template x-if="!loading && trips.length === 0">
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M16.24 7.76l-2.12 6.36-6.36 2.12 2.12-6.36z"/></svg>
+        <h3>No trips yet</h3>
+        <p style="margin-bottom:var(--space-6)">Start planning your first adventure</p>
+        <a href="/plan" class="btn btn-primary btn-lg">Plan my trip</a>
+      </div>
+    </template>
+
+    <!-- Trip grid -->
+    <div class="trip-grid container" x-show="!loading && trips.length > 0">
+      <template x-for="t in trips" :key="t.id">
+        <a :href="'/trip?id=' + t.id" class="trip-card">
+          <div class="trip-card-map" :style="mapPreviewStyle(t)"></div>
+          <div class="trip-card-body">
+            <div class="trip-card-destination" x-text="t.destination"></div>
+            <div class="trip-card-dates">
+              <template x-if="t.start_date">
+                <span x-text="fmtDateShort(t.start_date) + (t.end_date ? ' — ' + fmtDateShort(t.end_date) : '')"></span>
+              </template>
+              <template x-if="!t.start_date">
+                <span x-text="t.num_days + ' day' + (t.num_days > 1 ? 's' : '')"></span>
+              </template>
+            </div>
+            <div class="trip-card-footer">
+              <span class="trip-card-days" x-text="t.num_days + ' day' + (t.num_days > 1 ? 's' : '')"></span>
+              <span class="badge" :class="t.status === 'complete' ? 'badge-teal' : 'badge-sand'" x-text="t.status"></span>
+            </div>
+          </div>
+        </a>
+      </template>
+    </div>
+  </div>
+
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/app.js"></script>
+  <script>
+  function myTrips() {
+    return {
+      trips: [],
+      loading: true,
+
+      async init() {
+        const auth = Alpine.store('auth');
+        // Wait for auth to load
+        const check = setInterval(async () => {
+          if (!auth.loading) {
+            clearInterval(check);
+            if (!auth.loggedIn) {
+              window.location.href = '/api/auth/google';
+              return;
+            }
+            await this.loadTrips();
+          }
+        }, 100);
+      },
+
+      async loadTrips() {
+        try {
+          const data = await apiJson('/api/trips');
+          this.trips = data || [];
+        } catch { this.trips = []; }
+        this.loading = false;
+      },
+
+      mapPreviewStyle(t) {
+        if (t.destination_lat && t.destination_lng) {
+          const z = 11;
+          return `background-image: url('https://tile.openstreetmap.org/${z}/${this.lon2tile(t.destination_lng, z)}/${this.lat2tile(t.destination_lat, z)}.png');
+                  background-size: cover; background-position: center;`;
+        }
+        return `background: linear-gradient(135deg, var(--teal-100), var(--teal-200));`;
+      },
+
+      lon2tile(lon, zoom) { return Math.floor((lon + 180) / 360 * Math.pow(2, zoom)); },
+      lat2tile(lat, zoom) { return Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom)); },
+    };
+  }
+  </script>
+</body>
+</html>
