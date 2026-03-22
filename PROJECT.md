@@ -15,7 +15,10 @@
 |---|---|
 | **What** | AI travel planner: 10 questions -> day-by-day itinerary on split-view map |
 | **Stack** | CF Workers + Alpine.js + D1 + Leaflet + Gemini 2.5 Flash |
-| **Status** | New |
+| **Status** | Deployed |
+| **Type** | Personal |
+| **Live URL** | https://wandr.g-invernizzi-jm.workers.dev |
+| **GitHub** | https://github.com/giacomoinvernizzi19/wandr |
 
 ---
 
@@ -47,9 +50,12 @@
 ## Scripts
 
 ```bash
-npx wrangler dev     # Development server
-npx wrangler deploy  # Production deploy (--branch main!)
+npx wrangler dev                                    # Development server (localhost:8787)
+env -u CLOUDFLARE_API_TOKEN npx wrangler deploy     # Production deploy (personal account)
 ```
+
+**IMPORTANTE:** `CLOUDFLARE_API_TOKEN` in `.env` root punta all'account Enpal.
+Per deploy su account personale, SEMPRE usare `env -u CLOUDFLARE_API_TOKEN` per forzare OAuth.
 
 ---
 
@@ -77,13 +83,16 @@ node run.js C:/tmp/playwright-test-wandr.js
 
 ### Gotchas
 
-- `--branch main` per CF Pages deploy
+- `env -u CLOUDFLARE_API_TOKEN` per deploy su account personale
 - Leaflet `invalidateSize()` after split-view resize
 - `fitBounds` uniform `padding: [30, 30]`
 - `bindPopup({ autoPan: false })` on all markers
 - Gemini JSON: always try-catch parse
 - Google OAuth state cookie: `SameSite=Lax`
 - Nominatim: max 1 req/sec, debounce 500ms
+- Alpine.js `x-if` removes DOM, breaks Leaflet — usare `x-show` + `x-cloak` per container mappa
+- `JSON.parse()` in getter ritorna nuovi oggetti ogni volta — mutazioni in-memory sono effimere, riscrivere in `activities_json`
+- Wrangler v4 asset handler ritorna 405 su POST in locale (SPA mode) — funziona in produzione
 
 ---
 
@@ -91,9 +100,10 @@ node run.js C:/tmp/playwright-test-wandr.js
 
 | Data | File Modificati | CI Result | Note |
 |------|-----------------|-----------|------|
-| - | - | - | - |
+| 2026-03-21 | src/index.ts, static/*.html, static/style.css | - | Initial build: questionnaire, trip view, map, auth |
+| 2026-03-22 | static/trip.html, static/style.css | Playwright PASS | Bug fix: pin/refresh persistence, first-load rendering. New: Timeline Gantt view |
 
 ---
 
 **Created:** 2026-03-21
-**Last updated:** 2026-03-21
+**Last updated:** 2026-03-22
