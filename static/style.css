@@ -1506,6 +1506,59 @@ input[type="range"]::-moz-range-thumb {
 
 .tl-pinned { border-style: solid; border-color: var(--amber-400) !important; }
 
+/* Transport segments between activities */
+.tl-transport-bar {
+  position: absolute;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  background: var(--sand-100);
+  border: 1.5px dashed var(--sand-400);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  z-index: 0;
+  pointer-events: auto;
+  transition: border-color var(--duration-fast), background var(--duration-fast);
+}
+
+.tl-transport-bar:hover {
+  border-style: solid;
+  background: var(--sand-200);
+  color: var(--text-secondary);
+}
+
+/* Legend */
+.tl-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-6);
+  border-bottom: 1px solid var(--border-light);
+  background: var(--sand-50);
+}
+
+.tl-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  text-transform: capitalize;
+}
+
+.tl-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  border: 1.5px solid transparent;
+}
+
 /* Detail panel */
 .tl-detail {
   padding: var(--space-4) var(--space-6);
@@ -1552,7 +1605,7 @@ input[type="range"]::-moz-range-thumb {
 
 /* Ensure minimum width for timeline content so bars are readable */
 .tl-axis,
-.tl-bars { min-width: 600px; }
+.tl-bars { min-width: 720px; }
 
 /* Mobile: full-screen timeline */
 @media (max-width: 768px) {

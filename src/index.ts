@@ -88,6 +88,7 @@ interface Activity {
   pinned: boolean;
   website: string;
   hidden_gem_score: number;
+  travel_to_next?: { mode: string; duration_min: number; distance_km?: number };
 }
 
 function buildPrompt(prefs: any, dayNum: number, totalDays: number, pinnedActivities: Activity[] = []): string {
@@ -104,7 +105,7 @@ TRIP CONTEXT:
 - Intensity: ${prefs.intensity}/10 (1=very relaxed, 10=packed schedule)
 - Niche level: ${prefs.niche}/10 (1=mainstream highlights, 10=hidden gems only)
 - Interests: ${(prefs.interests || []).join(', ')}
-- Transport: ${prefs.transport}`;
+- Transport: ${Array.isArray(prefs.transport) ? prefs.transport.join(', ') : prefs.transport}`;
 
   if (prefs.accommodation) prompt += `\n- Staying at: ${prefs.accommodation}`;
   if (prefs.notes) prompt += `\n- Special notes: ${prefs.notes}`;
@@ -150,8 +151,15 @@ RESPOND WITH ONLY a valid JSON array. Each object must have these exact fields:
   "address": "Via Example 1, City",
   "pinned": false,
   "website": "https://example.com or empty string if unknown",
-  "hidden_gem_score": 7
+  "hidden_gem_score": 7,
+  "travel_to_next": { "mode": "walking", "duration_min": 15, "distance_km": 1.2 }
 }
+
+TRAVEL_TO_NEXT RULES:
+- Required for all activities EXCEPT the last of the day
+- mode must match user's transport preferences (${Array.isArray(prefs.transport) ? prefs.transport.join(', ') : prefs.transport})
+- The gap between one activity's time_end and next activity's time_start should equal travel_to_next.duration_min
+- distance_km is the approximate distance between the two places
 
 SCORING GUIDE:
 - hidden_gem_score (1-10): 1 = mainstream tourist must-see (e.g. Colosseum), 10 = only locals know about it
@@ -192,6 +200,15 @@ async function callGemini(prompt: string, apiKey: string): Promise<Activity[]> {
               pinned: { type: 'BOOLEAN' },
               website: { type: 'STRING' },
               hidden_gem_score: { type: 'INTEGER' },
+              travel_to_next: {
+                type: 'OBJECT',
+                properties: {
+                  mode: { type: 'STRING' },
+                  duration_min: { type: 'INTEGER' },
+                  distance_km: { type: 'NUMBER' },
+                },
+                required: ['mode', 'duration_min'],
+              },
             },
             required: ['name', 'order', 'time_start', 'time_end', 'lat', 'lng', 'description', 'type'],
           },
@@ -260,6 +277,7 @@ async function callGemini(prompt: string, apiKey: string): Promise<Activity[]> {
     pinned: a.pinned || false,
     website: a.website || '',
     hidden_gem_score: Number(a.hidden_gem_score) || 0,
+    ...(a.travel_to_next ? { travel_to_next: a.travel_to_next } : {}),
   }));
 }
 

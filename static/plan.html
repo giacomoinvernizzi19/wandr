@@ -153,13 +153,14 @@
       <!-- Step 8: Transport -->
       <div class="questionnaire-step" x-show="step === 8" x-transition>
         <h2 class="questionnaire-question">How do you get around?</h2>
-        <p class="questionnaire-hint">This affects how far apart we'll space activities</p>
-        <div class="options-grid cols-4">
+        <p class="questionnaire-hint">Pick all that apply — we'll plan routes accordingly</p>
+        <div class="pills" style="gap:var(--space-3)">
           <template x-for="t in transportOptions" :key="t.id">
-            <div class="option-card" :class="{ selected: data.transport === t.id }" @click="data.transport = t.id">
-              <div class="option-card-icon" x-text="t.icon"></div>
-              <div class="option-card-title" x-text="t.label"></div>
-            </div>
+            <button class="pill" :class="{ selected: data.transport.includes(t.id) }"
+                    @click="toggleTransport(t.id)" style="padding:var(--space-3) var(--space-5)">
+              <span class="pill-icon" x-text="t.icon"></span>
+              <span x-text="t.label"></span>
+            </button>
           </template>
         </div>
       </div>
@@ -218,7 +219,7 @@
         intensity: 5,
         niche: 5,
         interests: [],
-        transport: '',
+        transport: [],
         accommodation: '',
         notes: '',
       },
@@ -260,9 +261,9 @@
 
       transportOptions: [
         { id: 'walking', icon: '🚶', label: 'Walking' },
-        { id: 'public', icon: '🚇', label: 'Public Transit' },
+        { id: 'public_transport', icon: '🚇', label: 'Public Transit' },
         { id: 'car', icon: '🚗', label: 'Car' },
-        { id: 'mix', icon: '🔀', label: 'Mix' },
+        { id: 'bike', icon: '🚴', label: 'Bike' },
       ],
 
       get canProceed() {
@@ -271,7 +272,7 @@
         if (this.step === 3) return this.data.budget !== '';
         if (this.step === 4) return this.data.companions !== '';
         if (this.step === 7) return this.data.interests.length > 0;
-        if (this.step === 8) return this.data.transport !== '';
+        if (this.step === 8) return this.data.transport.length > 0;
         return true;
       },
 
@@ -294,6 +295,12 @@
         const idx = this.data.interests.indexOf(id);
         if (idx >= 0) this.data.interests.splice(idx, 1);
         else this.data.interests.push(id);
+      },
+
+      toggleTransport(id) {
+        const idx = this.data.transport.indexOf(id);
+        if (idx >= 0) this.data.transport.splice(idx, 1);
+        else this.data.transport.push(id);
       },
 
       async nextStep() {

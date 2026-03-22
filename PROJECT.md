@@ -102,6 +102,7 @@ node run.js C:/tmp/playwright-test-wandr.js
 |------|-----------------|-----------|------|
 | 2026-03-21 | src/index.ts, static/*.html, static/style.css | - | Initial build: questionnaire, trip view, map, auth |
 | 2026-03-22 | static/trip.html, static/style.css | Playwright PASS | Bug fix: pin/refresh persistence, first-load rendering. New: Timeline Gantt view |
+| 2026-03-22 | src/index.ts, static/plan.html, static/trip.html, static/style.css, src/index.test.ts | vitest 18/18 + Playwright 31/31 | Timeline: transport segments, color legend, dynamic axis (midnight). Questionnaire: multi-select transport (pills), bike option, removed mix |
 
 ---
 
