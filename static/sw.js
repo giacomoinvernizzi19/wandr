@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'wandr-v7';
+const CACHE_VERSION = 'wandr-v8';
 const PRECACHE = [
   '/',
   '/style.css',

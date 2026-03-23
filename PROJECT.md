@@ -95,6 +95,8 @@ node run.js C:/tmp/playwright-test-wandr.js
 - Wrangler v4 asset handler ritorna 405 su POST in locale (SPA mode) — funziona in produzione
 - Transport heuristic: haversine * 1.3 = distanza urbana approssimata. Auto-select mode per distanza (<=1.5km walk, 1.5-5km bike/transit, >5km car)
 - `removeActivity()` deve ricalcolare `travel_to_next` del precedente e cancellare quello dell'ultimo
+- Alpine v3 auto-init: `x-data="fn()"` con `init()` nel return object chiama init() automaticamente. MAI aggiungere `x-init="init()"` — causa double init
+- Alpine v3 reactivity: mutare `day.activities_json` su oggetto nested non trigghera reattivita'. Serve `this.days = [...this.days]` (top-level array replace) dopo ogni mutazione
 
 ---
 
@@ -108,8 +110,9 @@ node run.js C:/tmp/playwright-test-wandr.js
 | 2026-03-22 | static/trip.html, static/style.css, static/sw.js | Playwright 49/49 | Timeline rewrite: dynamic time engine, readable bars (emoji+time+name), transport strip below bars (80px rows), legend removed, pinned=amber 3px border, mobile vertical timeline, detail emoji, SW v4 |
 | 2026-03-22 | static/trip.html, static/style.css, static/sw.js | Playwright 33/33 | Timeline v2: replaced horizontal Gantt with vertical schedule strip. Full-width rows (time+accent+emoji+name+duration), transport connectors, proportional duration fill. Removed all orphaned gantt JS/CSS. SW v6 |
 | 2026-03-22 | src/index.ts, static/trip.html, static/my-trips.html, static/style.css, static/sw.js | Playwright PASS | Trip management: PATCH rename endpoint, inline rename + delete in My Trips. Remove activity with transport recalc. Local transport heuristic (haversineKm + estimateTransport). Transport mode override (clickable strips + picker). SW v7 |
+| 2026-03-23 | static/trip.html, static/my-trips.html, static/sw.js | Playwright PASS (both bugs) | Fix: double Alpine init (x-init + auto-init), Alpine reactivity for nested mutations (this.days = [...this.days]). Null safety for trip?.destination. Removed debug logging. SW v8 |
 
 ---
 
 **Created:** 2026-03-21
-**Last updated:** 2026-03-22
+**Last updated:** 2026-03-23
